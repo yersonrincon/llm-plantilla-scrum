@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start -p 43123",
     "lint": "eslint",
-    "init-db": "node scripts/init-db.js",
+    "init-db": "node engine/cli.js init",
+    "llm": "node engine/cli.js",
+    "llm:serve": "node engine/server.js",
     "setup": "npm install && npm run init-db",
     "check-ollama": "curl -s http://localhost:11434/api/version || echo 'Ollama no está corriendo. Ejecuta: ollama serve'"
   },

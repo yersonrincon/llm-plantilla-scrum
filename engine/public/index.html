@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plantilla Scrum</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1c1915;
+      --muted: #5c564c;
+      --line: #e4ddd2;
+      --paper: #f7f4ee;
+      --panel: #fffdf9;
+      --accent: #0f6e56;
+      --accent-ink: #ffffff;
+      --warn: #8a4b08;
+      --danger: #8f2d2d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 28px 0 8px; }
+    h1 { font-size: 1.7rem; margin: 0 0 8px; font-weight: 650; }
+    h2 { font-size: 1.05rem; margin: 0 0 12px; }
+    p { line-height: 1.45; }
+    .muted { color: var(--muted); }
+    .status {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 18px;
+      padding: 18px 0 40px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    label { display: block; font-size: 0.86rem; margin: 12px 0 4px; }
+    input, select, textarea, button {
+      font: inherit;
+      width: 100%;
+    }
+    input, select, textarea {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: white;
+      color: var(--ink);
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    .row { display: flex; gap: 8px; margin-top: 12px; }
+    button {
+      width: auto;
+      border: 0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      cursor: pointer;
+    }
+    button.secondary { background: #ece7df; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    ol { margin: 8px 0 0; padding-left: 18px; }
+    li { margin: 4px 0; }
+    .doc {
+      border-top: 1px solid var(--line);
+      padding: 8px 0;
+      font-size: 0.92rem;
+    }
+    .story, .step {
+      border-top: 1px solid var(--line);
+      padding: 8px 0;
+    }
+    .warn { color: var(--warn); }
+    .error { color: var(--danger); white-space: pre-wrap; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f3efe8;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 320px;
+      overflow: auto;
+    }
+    @media (max-width: 800px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Plantilla Scrum desde los manuales</h1>
+    <p class="muted">Hermes lee únicamente los casos de uso y manuales guardados en la base local. El texto que escribas aquí se guarda primero; el análisis sale de esa base.</p>
+    <div id="status" class="status">Comprobando Ollama…</div>
+  </header>
+  <main class="layout">
+    <section class="panel">
+      <h2>1. Base del proyecto</h2>
+      <ol id="flujo"></ol>
+      <label for="proyecto">Proyecto</label>
+      <input id="proyecto" value="ejemplo">
+      <div class="row">
+        <button type="button" id="cargar-ejemplo" class="secondary">Cargar ejemplo</button>
+        <button type="button" id="refrescar" class="secondary">Ver documentos</button>
+      </div>
+      <div id="docs"></div>
+
+      <h2 style="margin-top: 22px">2. Agregar un manual</h2>
+      <label for="titulo">Título</label>
+      <input id="titulo" placeholder="Caso de uso — Checkout">
+      <label for="tipo">Tipo</label>
+      <select id="tipo">
+        <option value="caso_uso">Caso de uso</option>
+        <option value="manual">Manual</option>
+        <option value="guia">Guía Scrum / calidad</option>
+        <option value="otro">Otro</option>
+      </select>
+      <label for="contenido">Contenido</label>
+      <textarea id="contenido" placeholder="Actor, flujo, criterios de aceptación…"></textarea>
+      <div class="row">
+        <button type="button" id="guardar">Guardar en la base</button>
+      </div>
+      <div class="row">
+        <button type="button" id="indexar">Indexar RAG</button>
+        <button type="button" id="generar">Generar plantilla</button>
+      </div>
+      <p id="espera" class="muted"></p>
+    </section>
+    <section class="panel">
+      <h2>3. Resultado</h2>
+      <div id="resultado"><p class="muted">Todavía no hay una plantilla de esta sesión.</p></div>
+      <h2 style="margin-top: 18px">Pregunta sobre la base</h2>
+      <label for="pregunta">Pregunta</label>
+      <input id="pregunta" placeholder="¿Qué pasa si el pago es rechazado?">
+      <div class="row">
+        <button type="button" id="preguntar" class="secondary">Consultar</button>
+      </div>
+      <div id="respuesta"></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    }
+
+    function proyecto() {
+      return $('proyecto').value.trim();
+    }
+
+    async function api(path, options) {
+      const response = await fetch(path, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'La solicitud falló');
+      return data;
+    }
+
+    function setBusy(busy, message) {
+      for (const id of ['guardar', 'indexar', 'generar', 'preguntar', 'cargar-ejemplo']) {
+        $(id).disabled = busy;
+      }
+      $('espera').textContent = message || '';
+    }
+
+    async function pintarSalud() {
+      const data = await api('/api/salud');
+      const conteos = data.conteos || {};
+      const modelo = data.modelo_chat;
+      if (data.ok && data.modelos_listos) {
+        $('status').textContent = `Ollama listo. Chat: ${modelo}. Documentos: ${conteos.documents}. Fragmentos RAG: ${conteos.embeddings}. Perfil RX: ${data.perfil_rx_vram_gb} GB.`;
+      } else if (data.ok) {
+        $('status').innerHTML = `<span class="warn">Ollama responde, pero falta un modelo. Chat esperado: ${escapeHtml(modelo)}. Embeddings: ${escapeHtml(data.modelo_embeddings)}.</span>`;
+      } else {
+        $('status').innerHTML = `<span class="error">${escapeHtml(data.ollama_error || 'Ollama no responde')}</span>`;
+      }
+    }
+
+    async function pintarFlujo() {
+      const data = await api('/api/flujo');
+      $('flujo').innerHTML = data.flujo.map((step) => `<li>${step}</li>`).join('');
+    }
+
+    async function pintarDocumentos() {
+      const data = await api('/api/documentos?proyecto=' + encodeURIComponent(proyecto()));
+      const docs = data.documentos || [];
+      if (!docs.length) {
+        $('docs').innerHTML = '<p class="muted">Este proyecto no tiene documentos.</p>';
+        return;
+      }
+      $('docs').innerHTML = docs.map((doc) => (
+        `<div class="doc"><strong>${escapeHtml(doc.titulo)}</strong><br><span class="muted">${escapeHtml(doc.tipo)} · ${escapeHtml(doc.caracteres)} caracteres</span></div>`
+      )).join('');
+    }
+
+    function pintarPlantilla(plantilla) {
+      const inicio = (plantilla.fases && plantilla.fases.inicio && plantilla.fases.inicio.analisis) || {};
+      const backlog = (plantilla.fases && plantilla.fases.backlog && plantilla.fases.backlog.analisis && plantilla.fases.backlog.analisis.product_backlog) || [];
+      const pasos = plantilla.pasos_del_proyecto || [];
+      const historias = backlog.map((item) => {
+        const aviso = item.advertencia ? `<div class="warn">${escapeHtml(item.advertencia)}</div>` : '';
+        return `<div class="story"><strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.titulo)}<br><span class="muted">${escapeHtml(item.fase_proyecto)} · ${escapeHtml(item.story_points)} pts · ${escapeHtml(item.fuente_documento)}</span>${aviso}</div>`;
+      }).join('');
+      const plan = pasos.map((step) => {
+        const sprints = (step.sprints || []).map((sprint) => (
+          `Sprint ${escapeHtml(sprint.sprint_numero)}: ${escapeHtml((sprint.historias || []).join(', '))}`
+        )).join('<br>');
+        return `<div class="step"><strong>${escapeHtml(step.fase)}</strong><br>${escapeHtml(step.objetivo || '')}<br><span class="muted">${sprints}</span></div>`;
+      }).join('');
+      $('resultado').innerHTML = `
+        <p><strong>${escapeHtml(plantilla.proyecto)}</strong> · ${escapeHtml(plantilla.modelo)}</p>
+        <p>${escapeHtml(inicio.vision || '')}</p>
+        <h2>Historias</h2>
+        ${historias || '<p class="muted">Sin historias.</p>'}
+        <h2>Pasos del proyecto</h2>
+        ${plan || '<p class="muted">Sin plan.</p>'}
+        <h2>JSON guardado</h2>
+        <pre>${escapeHtml(JSON.stringify(plantilla, null, 2))}</pre>
+      `;
+    }
+
+    $('cargar-ejemplo').onclick = async () => {
+      setBusy(true, 'Guardando el ejemplo…');
+      try {
+        await api('/api/init', { method: 'POST' });
+        $('proyecto').value = 'ejemplo';
+        await pintarDocumentos();
+      } catch (error) {
+        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    $('refrescar').onclick = () => pintarDocumentos().catch((error) => {
+      $('docs').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    });
+
+    $('guardar').onclick = async () => {
+      setBusy(true, 'Guardando en SQLite…');
+      try {
+        await api('/api/documentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            proyecto: proyecto(),
+            titulo: $('titulo').value,
+            tipo: $('tipo').value,
+            contenido: $('contenido').value,
+          }),
+        });
+        $('contenido').value = '';
+        await pintarDocumentos();
+      } catch (error) {
+        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    $('indexar').onclick = async () => {
+      setBusy(true, 'Ollama está calculando embeddings y guardándolos en la base…');
+      try {
+        const data = await api('/api/indexar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proyecto: proyecto() }),
+        });
+        $('resultado').innerHTML = `<p>Indexados ${data.documentos.length} documentos.</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        await pintarSalud();
+      } catch (error) {
+        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    $('generar').onclick = async () => {
+      setBusy(true, 'Hermes está leyendo la base por fases. En una RX puede tardar varios minutos.');
+      try {
+        const data = await api('/api/plantilla', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proyecto: proyecto(), nombre: 'Scrum ' + proyecto() }),
+        });
+        pintarPlantilla(data.plantilla);
+      } catch (error) {
+        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    $('preguntar').onclick = async () => {
+      setBusy(true, 'Buscando fragmentos en la base…');
+      try {
+        const data = await api('/api/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proyecto: proyecto(), pregunta: $('pregunta').value }),
+        });
+        const texto = data.respuesta.respuesta || JSON.stringify(data.respuesta, null, 2);
+        $('respuesta').innerHTML = `<p>${escapeHtml(texto)}</p>`;
+      } catch (error) {
+        $('respuesta').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    pintarFlujo().catch((error) => {
+      $('flujo').innerHTML = `<li class="error">${escapeHtml(error.message)}</li>`;
+    });
+    pintarSalud().catch((error) => {
+      $('status').innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+    });
+    pintarDocumentos().catch(() => {});
+  </script>
+</body>
+</html>

@@ -329,3 +329,5 @@ MIT
 ---
 
 **Desarrollado con ❤️ usando Hermes 3, Ollama y Next.js**
+#   l l m - p l a n t i l l a - s c r u m  
+ 

@@ -5,11 +5,7 @@
  * Carga documentos de ejemplo en la base de datos
  */
 
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
-
-const dbPath = path.join(__dirname, '..', 'data', 'scrum-llm.db');
+const { getDb } = require('../engine/db');
 
 const sampleDocuments = [
   {
@@ -310,26 +306,19 @@ El DoD puede adaptarse según el tipo de proyecto o fase:
 console.log('🚀 Inicializando base de datos Scrum LLM...\n');
 
 // Verificar que el directorio existe
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-  console.log('✓ Directorio data/ creado\n');
-}
-
-// Conectar a la base de datos
-const db = new Database(dbPath);
+const db = getDb();
 console.log('✓ Conectado a la base de datos\n');
 
 // Insertar documentos de ejemplo
 const insertStmt = db.prepare(`
-  INSERT INTO documents (title, content, type)
-  VALUES (?, ?, ?)
+  INSERT INTO documents (title, content, type, project)
+  VALUES (?, ?, ?, ?)
 `);
 
 let inserted = 0;
 for (const doc of sampleDocuments) {
   try {
-    insertStmt.run(doc.title, doc.content, doc.type);
+    insertStmt.run(doc.title, doc.content, doc.type, 'general');
     console.log(`✓ Insertado: ${doc.title}`);
     inserted++;
   } catch (error) {
@@ -337,8 +326,6 @@ for (const doc of sampleDocuments) {
   }
 }
 
-db.close();
-
 console.log(`\n✅ Inicialización completada: ${inserted}/${sampleDocuments.length} documentos insertados`);
-console.log('\n📝 Nota: Los embeddings se generarán automáticamente cuando inicies la aplicación\n');
-console.log('Para iniciar la aplicación ejecuta: npm run dev\n');
+console.log('\nEsos manuales quedaron en el proyecto "general".');
+console.log('Indexa el RAG con: node engine/cli.js indexar --proyecto general\n');
