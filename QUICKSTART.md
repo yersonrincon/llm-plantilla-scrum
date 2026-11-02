@@ -38,12 +38,11 @@ ollama serve
 ## Iniciar la Aplicación
 
 ```bash
-# En otra terminal
-cd /workspace
-npm run dev
+# En otra terminal (Node.js 22.13 o superior, sin dependencias npm)
+npm start
 ```
 
-La aplicación estará en: **http://localhost:43123**
+La aplicación estará en: **http://127.0.0.1:43124**
 
 ## Funcionalidades sin Ollama
 
@@ -59,15 +58,18 @@ Sin Ollama instalado, podrás:
 # Inicializar base de datos con ejemplos
 npm run init-db
 
+# Indexar los ejemplos (calcula embeddings con Ollama)
+node engine/cli.js indexar --proyecto ejemplo
+
 # Iniciar aplicación
-npm run dev
+npm start
 ```
 
 ## Alternativas de Prueba
 
 Si no puedes instalar Ollama localmente, puedes:
 
-1. **Modificar para usar API remota**: Edita `lib/rag.ts` y `app/api/ollama/route.ts` para usar OpenAI, Anthropic u otro proveedor
+1. **Modificar para usar API remota**: Edita `engine/ollama.js` para usar OpenAI, Anthropic u otro proveedor
 2. **Docker**: Ejecuta Ollama en un contenedor Docker
 3. **Probar la UI**: La interfaz funciona y puedes ver cómo está estructurada
 

@@ -3,164 +3,448 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Plantilla Scrum</title>
+  <title>Asistente Scrum</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #1c1915;
-      --muted: #5c564c;
-      --line: #e4ddd2;
-      --paper: #f7f4ee;
-      --panel: #fffdf9;
+      --ink: #1d1b18;
+      --muted: #6b655b;
+      --line: #e6e0d6;
+      --paper: #f7f5f0;
+      --panel: #ffffff;
+      --side: #efebe3;
       --accent: #0f6e56;
+      --accent-soft: #e2f0eb;
       --accent-ink: #ffffff;
+      --user: #0f6e56;
       --warn: #8a4b08;
+      --warn-soft: #fbf0e1;
       --danger: #8f2d2d;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      font-family: "Segoe UI", sans-serif;
+      font-family: "Segoe UI", system-ui, sans-serif;
       color: var(--ink);
       background: var(--paper);
-    }
-    header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
-    header { padding: 28px 0 8px; }
-    h1 { font-size: 1.7rem; margin: 0 0 8px; font-weight: 650; }
-    h2 { font-size: 1.05rem; margin: 0 0 12px; }
-    p { line-height: 1.45; }
-    .muted { color: var(--muted); }
-    .status {
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      background: var(--panel);
-      border-radius: 8px;
-    }
-    .layout {
       display: grid;
-      grid-template-columns: 340px 1fr;
+      grid-template-columns: 300px 1fr;
+      overflow: hidden;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ---------- Barra lateral ---------- */
+    aside {
+      background: var(--side);
+      border-right: 1px solid var(--line);
+      padding: 18px 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
       gap: 18px;
-      padding: 18px 0 40px;
     }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 16px;
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand h1 { font-size: 1.1rem; margin: 0; }
+    .brand p { margin: 0; font-size: 0.8rem; color: var(--muted); }
+    .side-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 6px;
     }
-    label { display: block; font-size: 0.86rem; margin: 12px 0 4px; }
-    input, select, textarea, button {
-      font: inherit;
+    aside input {
       width: 100%;
-    }
-    input, select, textarea {
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 8px 10px;
-      background: white;
-      color: var(--ink);
+      background: var(--panel);
     }
-    textarea { min-height: 140px; resize: vertical; }
-    .row { display: flex; gap: 8px; margin-top: 12px; }
-    button {
-      width: auto;
+    #integraciones-panel input { margin-bottom: 6px; }
+    #integraciones-panel p { margin: 6px 0 4px; }
+    .side-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+    }
+    .side-item:hover { background: rgba(0, 0, 0, 0.04); }
+    .side-item .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .side-item small { color: var(--muted); display: block; }
+    .icon-btn {
       border: 0;
+      background: none;
+      padding: 2px 6px;
       border-radius: 6px;
-      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .icon-btn:hover { background: rgba(0, 0, 0, 0.06); color: var(--ink); }
+    .icon-btn.danger:hover { color: var(--danger); }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #bbb;
+      margin-right: 6px;
+    }
+    .dot.ok { background: #1f9d6c; }
+    .dot.warn { background: #d08a1e; }
+    .dot.err { background: var(--danger); }
+    .status { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+    .empty { font-size: 0.84rem; color: var(--muted); padding: 4px 8px; }
+
+    /* ---------- Chat ---------- */
+    .chat {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      min-width: 0;
+    }
+    .chat-header {
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--paper);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .chat-header strong { font-size: 0.98rem; }
+    .chat-header span { color: var(--muted); font-size: 0.85rem; }
+    .messages { overflow-y: auto; padding: 24px 16px 8px; scroll-behavior: smooth; }
+    .thread { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+    .msg { display: flex; gap: 12px; align-items: flex-start; }
+    .msg.user { flex-direction: row-reverse; }
+    .avatar {
+      flex: none;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 0.9rem;
       background: var(--accent);
       color: var(--accent-ink);
-      cursor: pointer;
     }
-    button.secondary { background: #ece7df; color: var(--ink); }
-    button:disabled { opacity: 0.55; cursor: wait; }
-    ol { margin: 8px 0 0; padding-left: 18px; }
-    li { margin: 4px 0; }
-    .doc {
-      border-top: 1px solid var(--line);
-      padding: 8px 0;
-      font-size: 0.92rem;
+    .msg.user .avatar { background: #d9d2c5; color: var(--ink); }
+    .bubble {
+      max-width: calc(100% - 46px);
+      line-height: 1.5;
+      font-size: 0.95rem;
     }
-    .story, .step {
-      border-top: 1px solid var(--line);
-      padding: 8px 0;
+    .msg.assistant .bubble {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 4px 14px 14px 14px;
+      padding: 12px 16px;
+      min-width: 0;
     }
+    .msg.user .bubble {
+      background: var(--user);
+      color: var(--accent-ink);
+      border-radius: 14px 4px 14px 14px;
+      padding: 10px 14px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .bubble p { margin: 6px 0; }
+    .bubble p:first-child { margin-top: 0; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble h3 { font-size: 0.95rem; margin: 16px 0 6px; }
+    .bubble ul { margin: 4px 0; padding-left: 20px; }
+    .bubble li { margin: 3px 0; }
+    .bubble code { background: #f1ede6; padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+    .msg.user .file-chip { background: rgba(255, 255, 255, 0.18); color: var(--accent-ink); }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.84rem; }
     .warn { color: var(--warn); }
     .error { color: var(--danger); white-space: pre-wrap; }
+    .source { font-size: 0.8rem; color: var(--muted); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .action {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.86rem;
+    }
+    .action:hover { border-color: var(--accent); color: var(--accent); }
+    .action.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .action.primary:hover { color: var(--accent-ink); filter: brightness(1.08); }
+    .typing { display: inline-flex; gap: 4px; vertical-align: middle; margin-right: 8px; }
+    .typing i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: blink 1.2s infinite ease-in-out;
+    }
+    .typing i:nth-child(2) { animation-delay: 0.2s; }
+    .typing i:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+    .steps { list-style: none; padding: 0; margin: 8px 0 0; }
+    .steps li { padding: 3px 0; font-size: 0.9rem; color: var(--muted); }
+    .steps li.done { color: var(--accent); }
+    .steps li.current { color: var(--ink); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 6px; }
+    th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
+    th { background: #f5f2ec; font-weight: 600; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+
+    /* ---------- Tablero tipo Jira / Trello ---------- */
+    .board-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+    .board-summary span { background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 0.8rem; }
+    .board { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; align-items: flex-start; }
+    .column { flex: 0 0 270px; background: #efebe3; border-radius: 10px; padding: 8px; }
+    .column-head { font-weight: 700; font-size: 0.85rem; display: flex; justify-content: space-between; gap: 6px; }
+    .column-sub { font-size: 0.74rem; color: var(--muted); margin-bottom: 4px; }
+    .ticket { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin-top: 8px; font-size: 0.82rem; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05); }
+    .ticket-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .ticket-id { font-weight: 700; color: var(--accent); font-size: 0.76rem; }
+    .ticket-meta { margin-left: auto; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+    .label { display: inline-block; width: 28px; height: 6px; border-radius: 3px; background: #b9b2a6; }
+    .label.alta { background: #d64545; }
+    .label.media { background: #e5a43b; }
+    .label.baja { background: #61a36b; }
+    .tasks { list-style: none; padding: 0; margin: 6px 0 0; border-top: 1px dashed var(--line); }
+    .tasks li { display: flex; gap: 6px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+    .tasks li:last-child { border-bottom: 0; }
+    .tasks .task-title { flex: 1; min-width: 0; }
+    .chip { display: inline-block; border-radius: 999px; padding: 0 7px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+    .hours { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+    .load-bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 3px; }
+    .load-bar i { display: block; height: 100%; background: var(--accent); }
+    .load-bar.over i { background: var(--danger); }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin: 6px 0;
+      background: #fcfbf8;
+    }
     pre {
       white-space: pre-wrap;
       word-break: break-word;
       background: #f3efe8;
-      padding: 12px;
+      padding: 10px;
       border-radius: 8px;
-      max-height: 320px;
+      max-height: 260px;
       overflow: auto;
+      font-size: 0.82rem;
     }
-    @media (max-width: 800px) {
-      .layout { grid-template-columns: 1fr; }
+
+    /* ---------- Composer ---------- */
+    .composer-wrap { padding: 8px 16px 18px; }
+    .composer {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 4px 18px rgba(40, 30, 10, 0.06);
+      padding: 8px;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
+    .composer:focus-within { border-color: #b9ae9c; }
+    .composer.over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 4px 8px; }
+    .file-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 10px;
+      padding: 5px 8px;
+      font-size: 0.84rem;
+      max-width: 100%;
+    }
+    .file-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+    .file-chip select {
+      border: 0;
+      background: transparent;
+      font-size: 0.8rem;
+      color: inherit;
+      padding: 0;
+    }
+    .file-chip.err { background: var(--warn-soft); color: var(--warn); }
+    .file-chip button { border: 0; background: none; color: inherit; padding: 0 2px; font-size: 0.95rem; }
+    .input-row { display: flex; align-items: flex-end; gap: 6px; }
+    .input-row textarea {
+      flex: 1;
+      border: 0;
+      outline: none;
+      resize: none;
+      min-height: 24px;
+      max-height: 200px;
+      padding: 8px 6px;
+      background: transparent;
+      line-height: 1.45;
+    }
+    .round {
+      flex: none;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 0;
+      display: grid;
+      place-items: center;
+      font-size: 1.1rem;
+    }
+    .round.attach { background: #f1ede6; color: var(--ink); }
+    .round.send { background: var(--accent); color: var(--accent-ink); }
+    .hint { max-width: 860px; margin: 6px auto 0; text-align: center; font-size: 0.76rem; color: var(--muted); }
+
+    @media (max-width: 860px) {
+      body { grid-template-columns: 1fr; overflow: auto; }
+      aside { display: none; }
+      aside.open { display: flex; position: fixed; inset: 0 25% 0 0; z-index: 5; box-shadow: 0 0 30px rgba(0,0,0,0.2); }
+      .menu { display: grid !important; }
+    }
+    .menu { display: none; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Plantilla Scrum desde los manuales</h1>
-    <p class="muted">Hermes lee únicamente los casos de uso y manuales guardados en la base local. El texto que escribas aquí se guarda primero; el análisis sale de esa base.</p>
-    <div id="status" class="status">Comprobando Ollama…</div>
-  </header>
-  <main class="layout">
-    <section class="panel">
-      <h2>1. Base del proyecto</h2>
-      <ol id="flujo"></ol>
-      <label for="proyecto">Proyecto</label>
-      <input id="proyecto" value="ejemplo">
-      <div class="row">
-        <button type="button" id="cargar-ejemplo" class="secondary">Cargar ejemplo</button>
-        <button type="button" id="refrescar" class="secondary">Ver documentos</button>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="avatar">H</div>
+      <div>
+        <h1>Asistente Scrum</h1>
+        <p>Plantillas desde tus casos de uso</p>
       </div>
-      <div id="docs"></div>
+    </div>
 
-      <h2 style="margin-top: 22px">2. Agregar un manual</h2>
-      <label for="titulo">Título</label>
-      <input id="titulo" placeholder="Caso de uso — Checkout">
-      <label for="tipo">Tipo</label>
-      <select id="tipo">
-        <option value="caso_uso">Caso de uso</option>
-        <option value="manual">Manual</option>
-        <option value="guia">Guía Scrum / calidad</option>
-        <option value="otro">Otro</option>
-      </select>
-      <label for="contenido">Contenido</label>
-      <textarea id="contenido" placeholder="Actor, flujo, criterios de aceptación…"></textarea>
-      <div class="row">
-        <button type="button" id="guardar">Guardar en la base</button>
+    <div>
+      <p class="side-title">Proyecto</p>
+      <input id="proyecto" list="proyectos" placeholder="Ej. tienda-online" value="ejemplo">
+      <datalist id="proyectos"></datalist>
       </div>
-      <div class="row">
-        <button type="button" id="indexar">Indexar RAG</button>
-        <button type="button" id="generar">Generar plantilla</button>
+
+    <div>
+      <p class="side-title">Manuales del proyecto</p>
+      <div id="docs"><p class="empty">Cargando…</p></div>
       </div>
-      <p id="espera" class="muted"></p>
+
+    <div>
+      <p class="side-title">Plantillas generadas</p>
+      <div id="plantillas"><p class="empty">Cargando…</p></div>
+      </div>
+
+    <div>
+      <details id="equipo-panel">
+        <summary class="side-title" style="display:list-item">Equipo y fechas</summary>
+        <label class="small muted" for="fecha-inicio">Inicio del primer sprint</label>
+        <input id="fecha-inicio" type="date">
+        <div id="equipo-campos"></div>
+        <p class="small muted" style="margin:4px 0 0">Si dejas un rol vacío, la tarea queda asignada al rol.</p>
+      </details>
+    </div>
+
+    <div>
+      <details id="integraciones-panel">
+        <summary class="side-title" style="display:list-item">Trello y Jira</summary>
+        <p class="small muted" style="margin:4px 0">Las dos APIs son gratuitas. Los datos se guardan solo en este navegador; también puedes ponerlos en <code>.env</code>.</p>
+        <p class="small"><strong>Trello</strong> · <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">obtener API key</a></p>
+        <input id="trello-key" data-integracion="trello.key" placeholder="API key" autocomplete="off">
+        <input id="trello-token" data-integracion="trello.token" type="password" placeholder="Token" autocomplete="off">
+        <p class="small" id="trello-token-link"></p>
+        <p class="small"><strong>Jira Cloud</strong> · <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">obtener API token</a></p>
+        <input data-integracion="jira.sitio" placeholder="Sitio: tu-empresa.atlassian.net" autocomplete="off">
+        <input data-integracion="jira.email" placeholder="Correo de tu cuenta Atlassian" autocomplete="off">
+        <input data-integracion="jira.token" type="password" placeholder="API token" autocomplete="off">
+        <input data-integracion="jira.proyecto" placeholder="Clave del proyecto (ej. SCRUM)" autocomplete="off">
+        <p class="small muted" id="integraciones-env"></p>
+      </details>
+    </div>
+
+    <div>
+      <p class="side-title">Base de conocimiento</p>
+      <div id="base" class="status small">Cargando…</div>
+    </div>
+
+    <div style="margin-top: auto">
+      <p class="side-title">Estado</p>
+      <div id="status" class="status"><span class="dot"></span>Comprobando Ollama…</div>
+    </div>
+  </aside>
+
+  <section class="chat">
+    <div class="chat-header">
+      <button type="button" class="round attach menu" id="menu" title="Proyectos y documentos">☰</button>
+      <div class="avatar">H</div>
+      <div>
+        <strong>Hermes · Asistente Scrum</strong><br>
+        <span id="subtitulo">Proyecto: ejemplo</span>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="thread" id="thread"></div>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer" id="composer">
+        <div class="attachments" id="adjuntos" hidden></div>
+        <div class="input-row">
+          <button type="button" class="round attach" id="adjuntar" title="Adjuntar manual o caso de uso (PDF, Word, TXT, MD)">📎</button>
+          <textarea id="entrada" rows="1" placeholder="Adjunta tus casos de uso, pega su texto o pídeme «Genera la plantilla Scrum»…"></textarea>
+          <button type="button" class="round send" id="enviar" title="Enviar">➤</button>
+        </div>
+      </div>
+      <input id="archivos" type="file" accept=".pdf,.docx,.txt,.md" multiple hidden>
+      <p class="hint">Hermes solo usa lo que dicen tus documentos. Formatos: PDF, Word (.docx), TXT y Markdown. Enter envía · Shift+Enter nueva línea.</p>
+    </div>
     </section>
-    <section class="panel">
-      <h2>3. Resultado</h2>
-      <div id="resultado"><p class="muted">Todavía no hay una plantilla de esta sesión.</p></div>
-      <h2 style="margin-top: 18px">Pregunta sobre la base</h2>
-      <label for="pregunta">Pregunta</label>
-      <input id="pregunta" placeholder="¿Qué pasa si el pago es rechazado?">
-      <div class="row">
-        <button type="button" id="preguntar" class="secondary">Consultar</button>
-      </div>
-      <div id="respuesta"></div>
-    </section>
-  </main>
+
   <script>
     const $ = (id) => document.getElementById(id);
+    const TIPOS = [
+      ['caso_uso', 'Caso de uso'],
+      ['manual', 'Manual'],
+      ['guia', 'Guía Scrum'],
+      ['otro', 'Otro'],
+    ];
+    const NOMBRE_TIPO = Object.fromEntries(TIPOS);
+    const NOMBRE_FASE = {
+      inicio: 'Inicio',
+      sprint_0: 'Sprint 0',
+      construccion: 'Construcción',
+      integracion: 'Integración',
+      release: 'Release',
+    };
+    const FASES_ANALISIS = [
+      ['Indexando', 'Leyendo e indexando tus documentos'],
+      ['Inicio', 'Visión, actores y alcance'],
+      ['Product backlog', 'Historias de usuario y story points'],
+      ['Plan', 'Fases y sprints'],
+      ['Tareas', 'Tareas, responsables y horas'],
+      ['Calidad', 'Definition of done, riesgos y ceremonias'],
+    ];
+    const ROLES_EQUIPO = [
+      ['product_owner', 'Product Owner'],
+      ['scrum_master', 'Scrum Master'],
+      ['analista', 'Analista'],
+      ['desarrollador_backend', 'Dev Backend'],
+      ['desarrollador_frontend', 'Dev Frontend'],
+      ['qa', 'QA / Pruebas'],
+      ['devops', 'DevOps'],
+    ];
+    const PLANTILLAS = new Map();
+    let adjuntos = [];
+    let documentos = [];
+    let ocupado = false;
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[char]));
     }
 
@@ -175,165 +459,1236 @@
       return data;
     }
 
-    function setBusy(busy, message) {
-      for (const id of ['guardar', 'indexar', 'generar', 'preguntar', 'cargar-ejemplo']) {
-        $(id).disabled = busy;
-      }
-      $('espera').textContent = message || '';
+    function postJson(path, body) {
+      return api(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
     }
 
+    function setBusy(busy) {
+      ocupado = busy;
+      $('enviar').disabled = busy;
+      $('adjuntar').disabled = busy;
+      for (const button of document.querySelectorAll('.action')) button.disabled = busy;
+    }
+
+    // ---------- Mensajes ----------
+    function scrollAbajo() {
+      requestAnimationFrame(() => {
+        $('messages').scrollTop = $('messages').scrollHeight;
+      });
+    }
+
+    function mensaje(rol, html) {
+      const wrap = document.createElement('div');
+      wrap.className = `msg ${rol}`;
+      wrap.innerHTML = `<div class="avatar">${rol === 'assistant' ? 'H' : 'Tú'}</div><div class="bubble">${html}</div>`;
+      $('thread').appendChild(wrap);
+      scrollAbajo();
+      return wrap.querySelector('.bubble');
+    }
+
+    const asistente = (html) => mensaje('assistant', html);
+    const usuario = (html) => mensaje('user', html);
+
+    function botones(lista) {
+      return `<div class="actions">${lista.map(([accion, texto, primario]) => (
+        `<button type="button" class="action${primario ? ' primary' : ''}" data-accion="${accion}">${texto}</button>`
+      )).join('')}</div>`;
+    }
+
+    function pensando(texto) {
+      return asistente(`<span class="typing"><i></i><i></i><i></i></span><span class="muted">${escapeHtml(texto)}</span>`);
+    }
+
+    // ---------- Barra lateral ----------
     async function pintarSalud() {
+      try {
       const data = await api('/api/salud');
-      const conteos = data.conteos || {};
-      const modelo = data.modelo_chat;
-      if (data.ok && data.modelos_listos) {
-        $('status').textContent = `Ollama listo. Chat: ${modelo}. Documentos: ${conteos.documents}. Fragmentos RAG: ${conteos.embeddings}. Perfil RX: ${data.perfil_rx_vram_gb} GB.`;
-      } else if (data.ok) {
-        $('status').innerHTML = `<span class="warn">Ollama responde, pero falta un modelo. Chat esperado: ${escapeHtml(modelo)}. Embeddings: ${escapeHtml(data.modelo_embeddings)}.</span>`;
-      } else {
-        $('status').innerHTML = `<span class="error">${escapeHtml(data.ollama_error || 'Ollama no responde')}</span>`;
+        const ollama = data.ollama_error
+          ? `<span class="dot err"></span>${escapeHtml(data.ollama_error)}`
+          : data.modelos_listos
+            ? `<span class="dot ok"></span>Ollama listo<br><span class="small">Modelo: ${escapeHtml(data.modelo_chat)}</span>`
+            : `<span class="dot warn"></span>Falta un modelo en Ollama<br><span class="small">Ejecuta <code>ollama pull ${escapeHtml(data.modelo_chat)}</code></span>`;
+        const base = data.base_ok
+          ? `<span class="dot ok"></span>PostgreSQL conectado<br><span class="small">${escapeHtml(data.base)}</span>`
+          : `<span class="dot err"></span>${escapeHtml(data.base_error || 'PostgreSQL no responde')}`;
+        $('status').innerHTML = `${ollama}<div style="margin-top: 8px">${base}</div>`;
+        pintarBase(data.base_conocimiento);
+        return data;
+      } catch (error) {
+        $('status').innerHTML = `<span class="dot err"></span>${escapeHtml(error.message)}`;
+        return null;
       }
     }
 
-    async function pintarFlujo() {
-      const data = await api('/api/flujo');
-      $('flujo').innerHTML = data.flujo.map((step) => `<li>${step}</li>`).join('');
+    async function pintarProyectos() {
+      const data = await api('/api/documentos');
+      const nombres = [...new Set((data.documentos || []).map((doc) => doc.proyecto))].sort();
+      $('proyectos').innerHTML = nombres.map((name) => `<option value="${escapeHtml(name)}">`).join('');
     }
 
     async function pintarDocumentos() {
-      const data = await api('/api/documentos?proyecto=' + encodeURIComponent(proyecto()));
-      const docs = data.documentos || [];
-      if (!docs.length) {
-        $('docs').innerHTML = '<p class="muted">Este proyecto no tiene documentos.</p>';
+      documentos = [];
+      if (!proyecto()) {
+        $('docs').innerHTML = '<p class="empty">Escribe el nombre del proyecto.</p>';
         return;
       }
-      $('docs').innerHTML = docs.map((doc) => (
-        `<div class="doc"><strong>${escapeHtml(doc.titulo)}</strong><br><span class="muted">${escapeHtml(doc.tipo)} · ${escapeHtml(doc.caracteres)} caracteres</span></div>`
-      )).join('');
+      const data = await api('/api/documentos?proyecto=' + encodeURIComponent(proyecto()));
+      documentos = data.documentos || [];
+      $('docs').innerHTML = documentos.length
+        ? documentos.map((doc) => `
+          <div class="side-item">
+            <span>📄</span>
+            <div class="grow">${escapeHtml(doc.titulo)}
+              <small>${escapeHtml(NOMBRE_TIPO[doc.tipo] || doc.tipo)} · ${doc.indexado ? 'indexado' : 'por indexar'}</small>
+            </div>
+            <button type="button" class="icon-btn danger" data-borrar="${doc.id}" title="Eliminar">✕</button>
+          </div>`).join('')
+        : '<p class="empty">Sin documentos. Adjúntalos en el chat.</p>';
     }
 
-    function pintarPlantilla(plantilla) {
-      const inicio = (plantilla.fases && plantilla.fases.inicio && plantilla.fases.inicio.analisis) || {};
-      const backlog = (plantilla.fases && plantilla.fases.backlog && plantilla.fases.backlog.analisis && plantilla.fases.backlog.analisis.product_backlog) || [];
-      const pasos = plantilla.pasos_del_proyecto || [];
-      const historias = backlog.map((item) => {
-        const aviso = item.advertencia ? `<div class="warn">${escapeHtml(item.advertencia)}</div>` : '';
-        return `<div class="story"><strong>${escapeHtml(item.id)}</strong> ${escapeHtml(item.titulo)}<br><span class="muted">${escapeHtml(item.fase_proyecto)} · ${escapeHtml(item.story_points)} pts · ${escapeHtml(item.fuente_documento)}</span>${aviso}</div>`;
-      }).join('');
-      const plan = pasos.map((step) => {
-        const sprints = (step.sprints || []).map((sprint) => (
-          `Sprint ${escapeHtml(sprint.sprint_numero)}: ${escapeHtml((sprint.historias || []).join(', '))}`
-        )).join('<br>');
-        return `<div class="step"><strong>${escapeHtml(step.fase)}</strong><br>${escapeHtml(step.objetivo || '')}<br><span class="muted">${sprints}</span></div>`;
-      }).join('');
-      $('resultado').innerHTML = `
-        <p><strong>${escapeHtml(plantilla.proyecto)}</strong> · ${escapeHtml(plantilla.modelo)}</p>
-        <p>${escapeHtml(inicio.vision || '')}</p>
-        <h2>Historias</h2>
-        ${historias || '<p class="muted">Sin historias.</p>'}
-        <h2>Pasos del proyecto</h2>
-        ${plan || '<p class="muted">Sin plan.</p>'}
-        <h2>JSON guardado</h2>
-        <pre>${escapeHtml(JSON.stringify(plantilla, null, 2))}</pre>
-      `;
+    async function pintarPlantillas() {
+      if (!proyecto()) {
+        $('plantillas').innerHTML = '';
+        return;
+      }
+      const data = await api('/api/plantillas?proyecto=' + encodeURIComponent(proyecto()));
+      const items = data.plantillas || [];
+      $('plantillas').innerHTML = items.length
+        ? items.map((item) => `
+          <div class="side-item">
+            <span>🗂️</span>
+            <div class="grow">${escapeHtml(item.name)}<small>${escapeHtml(new Date(item.created_at).toLocaleString('es'))}</small></div>
+            <button type="button" class="icon-btn" data-abrir="${item.id}" title="Mostrar en el chat">Ver</button>
+          </div>`).join('')
+        : '<p class="empty">Todavía no hay plantillas.</p>';
     }
 
-    $('cargar-ejemplo').onclick = async () => {
-      setBusy(true, 'Guardando el ejemplo…');
+    function claveEquipo() {
+      return `equipo:${proyecto()}`;
+    }
+
+    function pintarEquipo() {
+      const guardado = JSON.parse(localStorage.getItem(claveEquipo()) || '{}');
+      $('fecha-inicio').value = guardado.inicio || '';
+      $('equipo-campos').innerHTML = ROLES_EQUIPO.map(([rol, nombre]) => `
+        <label class="small muted" for="equipo-${rol}">${nombre}</label>
+        <input id="equipo-${rol}" data-rol="${rol}" placeholder="Nombre (opcional)" value="${escapeHtml((guardado.equipo || {})[rol] || '')}">`).join('');
+    }
+
+    function opcionesEquipo() {
+      const equipo = {};
+      document.querySelectorAll('#equipo-campos [data-rol]').forEach((input) => {
+        if (input.value.trim()) equipo[input.dataset.rol] = input.value.trim();
+      });
+      return { inicio: $('fecha-inicio').value || '', equipo };
+    }
+
+    $('equipo-panel').addEventListener('input', () => {
+      localStorage.setItem(claveEquipo(), JSON.stringify(opcionesEquipo()));
+    });
+
+    function credencialesIntegracion() {
+      const datos = { trello: {}, jira: {} };
+      document.querySelectorAll('[data-integracion]').forEach((input) => {
+        const [destino, campo] = input.dataset.integracion.split('.');
+        if (input.value.trim()) datos[destino][campo] = input.value.trim();
+      });
+      return datos;
+    }
+
+    function pintarEnlaceToken() {
+      const key = $('trello-key').value.trim();
+      $('trello-token-link').innerHTML = key
+        ? `<a href="https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&name=Plantilla%20Scrum&key=${encodeURIComponent(key)}" target="_blank" rel="noopener">Generar el token de Trello</a> y pégalo arriba.`
+        : '';
+    }
+
+    async function pintarIntegraciones() {
+      const guardado = JSON.parse(localStorage.getItem('integraciones') || '{}');
+      document.querySelectorAll('[data-integracion]').forEach((input) => {
+        const [destino, campo] = input.dataset.integracion.split('.');
+        input.value = (guardado[destino] || {})[campo] || '';
+      });
+      pintarEnlaceToken();
+      const env = await api('/api/integraciones').catch(() => ({}));
+      const listos = [env.trello && 'Trello', env.jira && `Jira (${env.jira_proyecto})`].filter(Boolean);
+      $('integraciones-env').textContent = listos.length ? `Configurado en .env: ${listos.join(' y ')}.` : '';
+    }
+
+    $('integraciones-panel').addEventListener('input', () => {
+      localStorage.setItem('integraciones', JSON.stringify(credencialesIntegracion()));
+      pintarEnlaceToken();
+    });
+    pintarIntegraciones();
+
+    let BASE = null;
+    function pintarBase(base) {
+      if (!base) {
+        $('base').innerHTML = '<p class="empty">Sin conexión con la base.</p>';
+        return;
+      }
+      BASE = base;
+      const abierta = proyecto() === base.proyecto;
+      $('base').innerHTML = `
+        <div class="side-item">
+          <span>📚</span>
+          <div class="grow">${base.documentos} documento${base.documentos === 1 ? '' : 's'} · ${base.fragmentos} fragmentos
+            <small>Compartida por todos los proyectos${base.documentos > base.indexados ? ` · ${base.documentos - base.indexados} por indexar` : ''}</small>
+          </div>
+          <button type="button" class="icon-btn" id="abrir-base" title="${abierta ? 'Volver a un proyecto' : 'Cargar documentación a la base'}">${abierta ? 'Salir' : 'Cargar'}</button>
+        </div>`;
+    }
+
+    let proyectoAnterior = '';
+    $('base').addEventListener('click', (event) => {
+      if (event.target.id !== 'abrir-base' || !BASE || ocupado) return;
+      if (proyecto() === BASE.proyecto) {
+        $('proyecto').value = proyectoAnterior || 'ejemplo';
+      } else {
+        proyectoAnterior = proyecto();
+        $('proyecto').value = BASE.proyecto;
+      }
+      cambiarProyecto(true);
+      pintarBase(BASE);
+    });
+
+    function refrescarLateral() {
+      pintarEquipo();
+      return Promise.all([
+        pintarDocumentos(),
+        pintarPlantillas(),
+        pintarProyectos(),
+        api('/api/base').then(pintarBase),
+      ]).catch(() => {});
+    }
+
+    $('docs').addEventListener('click', async (event) => {
+      const id = event.target.dataset && event.target.dataset.borrar;
+      if (!id || ocupado) return;
+      const doc = documentos.find((item) => String(item.id) === id);
+      if (!confirm(`¿Eliminar «${doc ? doc.titulo : 'documento'}» del proyecto?`)) return;
+      try {
+        await api('/api/documentos?id=' + encodeURIComponent(id), { method: 'DELETE' });
+        asistente(`<p>Eliminé <strong>${escapeHtml(doc ? doc.titulo : 'el documento')}</strong> del proyecto.</p>`);
+        await refrescarLateral();
+      } catch (error) {
+        asistente(`<p class="error">${escapeHtml(error.message)}</p>`);
+      }
+    });
+
+    $('plantillas').addEventListener('click', async (event) => {
+      const id = event.target.dataset && event.target.dataset.abrir;
+      if (!id) return;
+      try {
+        const data = await api('/api/plantillas?id=' + encodeURIComponent(id));
+        mostrarPlantilla(data.plantilla.template_data, `Esta es la plantilla <strong>${escapeHtml(data.plantilla.name)}</strong>:`);
+        $('sidebar').classList.remove('open');
+      } catch (error) {
+        asistente(`<p class="error">${escapeHtml(error.message)}</p>`);
+      }
+    });
+
+    // ---------- Adjuntos ----------
+    function tipoSugerido(nombre) {
+      const lower = nombre.toLowerCase();
+      if (BASE && proyecto() === BASE.proyecto) return 'guia';
+      if (/scrum|gu[ií]a|definition|done|calidad/.test(lower)) return 'guia';
+      if (/manual/.test(lower)) return 'manual';
+      return 'caso_uso';
+    }
+
+    function leerBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = () => reject(new Error(`No se pudo leer ${file.name}`));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function pintarAdjuntos() {
+      $('adjuntos').hidden = !adjuntos.length;
+      $('adjuntos').innerHTML = adjuntos.map((item) => {
+        if (item.estado === 'leyendo') {
+          return `<span class="file-chip"><span class="typing"><i></i><i></i><i></i></span><span class="name">${escapeHtml(item.archivo)}</span></span>`;
+        }
+        if (item.estado === 'error') {
+          return `<span class="file-chip err" title="${escapeHtml(item.error)}">⚠ <span class="name">${escapeHtml(item.archivo)}</span>
+            <button type="button" data-quitar="${item.key}" title="Quitar">×</button></span>`;
+        }
+        return `<span class="file-chip">📄 <span class="name" title="${escapeHtml(item.titulo)}">${escapeHtml(item.archivo)}</span>
+          <select data-tipo="${item.key}" title="Tipo de documento">${TIPOS.map(([value, label]) => (
+            `<option value="${value}"${value === item.tipo ? ' selected' : ''}>${label}</option>`
+          )).join('')}</select>
+          <button type="button" data-quitar="${item.key}" title="Quitar">×</button></span>`;
+      }).join('');
+    }
+
+    async function agregarArchivos(files) {
+      for (const file of files) {
+        const item = { key: crypto.randomUUID(), archivo: file.name, estado: 'leyendo' };
+        adjuntos.push(item);
+        pintarAdjuntos();
+        try {
+          const extraido = await postJson('/api/extraer', { nombre: file.name, datos: await leerBase64(file) });
+          Object.assign(item, {
+            estado: 'listo',
+            titulo: extraido.titulo,
+            contenido: extraido.contenido,
+            depuracion: extraido.depuracion && extraido.depuracion.resumen,
+            tipo: tipoSugerido(file.name),
+          });
+      } catch (error) {
+          Object.assign(item, { estado: 'error', error: error.message });
+        }
+        pintarAdjuntos();
+      }
+      $('entrada').focus();
+    }
+
+    $('adjuntos').addEventListener('click', (event) => {
+      const key = event.target.dataset && event.target.dataset.quitar;
+      if (!key) return;
+      adjuntos = adjuntos.filter((item) => item.key !== key);
+      pintarAdjuntos();
+    });
+    $('adjuntos').addEventListener('change', (event) => {
+      const key = event.target.dataset && event.target.dataset.tipo;
+      const item = adjuntos.find((entry) => entry.key === key);
+      if (item) item.tipo = event.target.value;
+    });
+
+    $('adjuntar').onclick = () => $('archivos').click();
+    $('archivos').onchange = () => {
+      agregarArchivos([...$('archivos').files]);
+      $('archivos').value = '';
+    };
+    const composer = $('composer');
+    for (const target of [composer, $('messages')]) {
+      target.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        composer.classList.add('over');
+      });
+      target.addEventListener('dragleave', () => composer.classList.remove('over'));
+      target.addEventListener('drop', (event) => {
+        event.preventDefault();
+        composer.classList.remove('over');
+        if (event.dataTransfer.files.length) agregarArchivos([...event.dataTransfer.files]);
+      });
+    }
+
+    // ---------- Acciones del asistente ----------
+    async function guardarAdjuntos(listos) {
+      const guardados = [];
+      const fallidos = [];
+      for (const item of listos) {
+        try {
+          await postJson('/api/documentos', {
+            proyecto: proyecto(),
+            titulo: item.titulo,
+            tipo: item.tipo,
+            contenido: item.contenido,
+          });
+          guardados.push(item);
+      } catch (error) {
+          fallidos.push({ ...item, error: error.message });
+        }
+      }
+      await refrescarLateral();
+      return { guardados, fallidos };
+    }
+
+    function resumenBase(guardados, fallidos, indexados) {
+      if (indexados) {
+        const fragmentos = indexados.reduce((total, item) => total + item.fragmentos, 0);
+        return `<p>📚 Indexé ${indexados.length} documento${indexados.length === 1 ? '' : 's'} (${fragmentos} fragmentos) en la base de conocimiento. Ya la uso al generar la plantilla de cualquier proyecto.</p>
+          ${BASE ? `<p class="small muted">La base tiene ahora ${BASE.documentos} documentos y ${BASE.fragmentos} fragmentos.</p>` : ''}
+          ${botones([['adjuntar', '📎 Adjuntar más documentación', true]])}`;
+      }
+      const partes = [];
+      if (guardados.length) {
+        partes.push(`<p>Guardé en la base de conocimiento:</p><ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${item.contenido.length.toLocaleString('es')} caracteres</span>
+          ${item.depuracion ? `<div class="small muted">🧹 ${escapeHtml(item.depuracion)}</div>` : ''}</li>`).join('')}</ul>`);
+      }
+      if (fallidos.length) {
+        partes.push(`<p class="error">No pude guardar: ${fallidos.map((item) => `${escapeHtml(item.archivo)} (${escapeHtml(item.error)})`).join(', ')}</p>`);
+      }
+      return partes.join('');
+    }
+
+    function resumenGuardados(guardados, fallidos) {
+      const partes = [];
+      if (guardados.length) {
+        partes.push(`<p>Listo, guardé ${guardados.length === 1 ? 'este documento' : `estos ${guardados.length} documentos`} en el proyecto <strong>${escapeHtml(proyecto())}</strong>:</p>`);
+        partes.push(`<ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${escapeHtml(NOMBRE_TIPO[item.tipo])} · ${item.contenido.length.toLocaleString('es')} caracteres</span>
+          ${item.depuracion ? `<div class="small muted">🧹 ${escapeHtml(item.depuracion)}</div>` : ''}
+          <details><summary>Ver el texto que leí</summary><pre>${escapeHtml(item.contenido.slice(0, 4000))}${item.contenido.length > 4000 ? '\n…' : ''}</pre></details></li>`).join('')}</ul>`);
+      }
+      if (fallidos.length) {
+        partes.push(`<p class="error">No pude guardar: ${fallidos.map((item) => `${escapeHtml(item.archivo)} (${escapeHtml(item.error)})`).join(', ')}</p>`);
+      }
+      const totalCasos = documentos.filter((doc) => doc.tipo === 'caso_uso' || doc.tipo === 'manual').length;
+      partes.push(`<p>El proyecto tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} (${totalCasos} de casos de uso o manuales). Puedes adjuntar más o pedirme la plantilla.</p>`);
+      partes.push(botones([['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]));
+      return partes.join('');
+    }
+
+    async function generar() {
+      if (!documentos.some((doc) => doc.tipo === 'caso_uso' || doc.tipo === 'manual')) {
+        asistente(`<p>Para generar la plantilla necesito al menos un <strong>caso de uso</strong> o <strong>manual</strong> en el proyecto <strong>${escapeHtml(proyecto())}</strong>.</p>
+          <p>Adjunta tus archivos con 📎 o pega el texto del caso de uso aquí.</p>${botones([['adjuntar', '📎 Adjuntar manual'], ['ejemplo', 'Usar casos de ejemplo']])}`);
+        return;
+      }
+      setBusy(true);
+      const project = proyecto();
+      const inicio = Date.now();
+      const burbuja = asistente('');
+      let indice = 0;
+      const pintarProgreso = (actual) => {
+        const encontrado = FASES_ANALISIS.findIndex(([prefijo]) => actual.startsWith(prefijo));
+        if (encontrado > indice) indice = encontrado;
+        const segundos = Math.round((Date.now() - inicio) / 1000);
+        const tiempo = `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, '0')}`;
+        burbuja.innerHTML = `<p><span class="typing"><i></i><i></i><i></i></span>Estoy analizando tus casos de uso… <span class="muted small">${tiempo}</span></p>
+          <ul class="steps">${FASES_ANALISIS.map(([, etiqueta], index) => (
+            `<li class="${index < indice ? 'done' : index === indice ? 'current' : ''}">${index < indice ? '✓' : index === indice ? '●' : '○'} ${escapeHtml(etiqueta)}</li>`
+          )).join('')}</ul>
+          <p class="muted small">${escapeHtml(actual)}</p>`;
+      };
+      let ultimo = 'Preparando el análisis';
+      pintarProgreso(ultimo);
+      const timer = setInterval(async () => {
+        try {
+          const data = await api('/api/progreso?proyecto=' + encodeURIComponent(project));
+          if (data.mensaje) ultimo = data.mensaje;
+        } catch {}
+        pintarProgreso(ultimo);
+      }, 1500);
+      try {
+        const data = await postJson('/api/plantilla', { proyecto: project, nombre: `Scrum ${project}`, ...opcionesEquipo() });
+        burbuja.closest('.msg').remove();
+        mostrarPlantilla(data.plantilla, `Terminé. Esta es la plantilla Scrum de <strong>${escapeHtml(project)}</strong>, basada solo en tus documentos:`);
+        await Promise.all([refrescarLateral(), pintarSalud()]);
+      } catch (error) {
+        burbuja.innerHTML = `<p class="error">No pude generar la plantilla: ${escapeHtml(error.message)}</p>`;
+      } finally {
+        clearInterval(timer);
+        setBusy(false);
+      }
+    }
+
+    async function preguntar(texto) {
+      if (!documentos.length) {
+        asistente(`<p>Todavía no tengo documentos del proyecto <strong>${escapeHtml(proyecto())}</strong> para responder. Adjunta tus casos de uso con 📎 o pega su texto aquí.</p>`);
+        return;
+      }
+      setBusy(true);
+      const burbuja = pensando('Buscando en tus manuales…');
+      try {
+        const data = await postJson('/api/consultar', { proyecto: proyecto(), pregunta: texto });
+        const respuesta = data.respuesta || {};
+        const fuentes = Array.isArray(respuesta.fuentes) ? respuesta.fuentes.filter(Boolean) : [];
+        burbuja.innerHTML = `<p>${escapeHtml(respuesta.respuesta || JSON.stringify(respuesta)).replace(/\n/g, '<br>')}</p>
+          ${fuentes.length ? `<p class="source">Fuentes: ${escapeHtml(fuentes.join(', '))}</p>` : ''}`;
+        refrescarLateral();
+      } catch (error) {
+        burbuja.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+        scrollAbajo();
+      }
+    }
+
+    async function cargarEjemplo() {
+      setBusy(true);
       try {
         await api('/api/init', { method: 'POST' });
         $('proyecto').value = 'ejemplo';
-        await pintarDocumentos();
+        cambiarProyecto(false);
+        await refrescarLateral();
+        asistente(`<p>Cargué los casos de uso de ejemplo en el proyecto <strong>ejemplo</strong>:</p>
+          <ul>${documentos.map((doc) => `<li>${escapeHtml(doc.titulo)}</li>`).join('')}</ul>
+          ${botones([['generar', '✨ Generar plantilla Scrum', true]])}`);
       } catch (error) {
-        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+        asistente(`<p class="error">${escapeHtml(error.message)}</p>`);
       } finally {
         setBusy(false);
       }
-    };
+    }
 
-    $('refrescar').onclick = () => pintarDocumentos().catch((error) => {
-      $('docs').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+    const ES_PREGUNTA = /[?¿]|^\s*(qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]nt[oa]s?|qui[eé]n(es)?|d[oó]nde|cu[aá]ndo|por\s*qu[eé]|explica|lista|resume|describe|dime)(?![\wáéíóúñ])/i;
+    const PIDE_PLANTILLA = /\b(genera|generar|crea|crear|haz|hacer|arma|armar|elabora|dame|quiero)\b.*\b(plantilla|scrum|backlog|sprints?)\b|^\s*(plantilla|generar)\s*$/i;
+
+    async function enviar() {
+      if (ocupado) return;
+      const texto = $('entrada').value.trim();
+      if (adjuntos.some((item) => item.estado === 'leyendo')) {
+        asistente('<p class="muted">Espera un momento, todavía estoy leyendo los archivos adjuntos.</p>');
+        return;
+      }
+      const listos = adjuntos.filter((item) => item.estado === 'listo');
+      if (!texto && !listos.length) return;
+      if (!proyecto()) {
+        asistente('<p>Primero escribe el nombre del proyecto en la barra lateral.</p>');
+        return;
+      }
+
+      const chips = listos.map((item) => `<span class="file-chip">📄 ${escapeHtml(item.archivo)}</span>`).join(' ');
+      usuario(`${chips ? `<div class="actions" style="margin: 0 0 ${texto ? '6px' : '0'}">${chips}</div>` : ''}${escapeHtml(texto)}`);
+      $('entrada').value = '';
+      ajustarAltura();
+      adjuntos = adjuntos.filter((item) => item.estado !== 'listo');
+      pintarAdjuntos();
+
+      const pegado = texto.length >= 300 && !PIDE_PLANTILLA.test(texto.slice(0, 120));
+      const nuevos = [...listos];
+      if (pegado) {
+        const primera = texto.split('\n').find((line) => line.trim()) || '';
+        const titulo = primera.replace(/^#+\s*/, '').trim().slice(0, 100) || 'Caso de uso pegado';
+        nuevos.push({ archivo: 'texto pegado', titulo, tipo: 'caso_uso', contenido: texto });
+      }
+
+      if (nuevos.length) {
+        setBusy(true);
+        const burbuja = pensando(`Guardando ${nuevos.length === 1 ? 'el documento' : `${nuevos.length} documentos`}…`);
+        try {
+          const { guardados, fallidos } = await guardarAdjuntos(nuevos);
+          if (BASE && proyecto() === BASE.proyecto) {
+            burbuja.innerHTML = resumenBase(guardados, fallidos, null);
+            if (guardados.length) {
+              const indexando = pensando('Indexando la documentación en la base de conocimiento…');
+              const timer = setInterval(async () => {
+                const data = await api('/api/progreso?proyecto=' + encodeURIComponent(proyecto())).catch(() => null);
+                if (data && data.mensaje) indexando.querySelector('.muted').textContent = data.mensaje;
+              }, 1200);
+              try {
+                const resultado = await postJson('/api/indexar', { proyecto: proyecto(), solo_pendientes: true });
+                await refrescarLateral();
+                indexando.innerHTML = resumenBase([], [], resultado.documentos);
+      } catch (error) {
+                indexando.innerHTML = `<p class="error">Guardé los documentos, pero no pude indexarlos: ${escapeHtml(error.message)}</p>
+                  <p class="small muted">Se indexarán solos la próxima vez que generes una plantilla.</p>`;
+              } finally {
+                clearInterval(timer);
+              }
+            }
+          } else {
+            burbuja.innerHTML = resumenGuardados(guardados, fallidos);
+          }
+        } catch (error) {
+          burbuja.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+      } finally {
+        setBusy(false);
+          scrollAbajo();
+        }
+        if (texto && !pegado && PIDE_PLANTILLA.test(texto)) await generar();
+        else if (texto && !pegado && ES_PREGUNTA.test(texto)) await preguntar(texto);
+        return;
+      }
+
+      if (PIDE_PLANTILLA.test(texto)) await generar();
+      else if (ES_PREGUNTA.test(texto) || documentos.length) await preguntar(texto);
+      else {
+        asistente(`<p>Para ayudarte necesito los casos de uso del proyecto <strong>${escapeHtml(proyecto())}</strong>. Adjúntalos con 📎 o pega aquí su texto completo.</p>
+          ${botones([['adjuntar', '📎 Adjuntar manual', true], ['ejemplo', 'Usar casos de ejemplo']])}`);
+      }
+    }
+
+    $('thread').addEventListener('click', (event) => {
+      const accion = event.target.dataset && event.target.dataset.accion;
+      if (!accion || ocupado) return;
+      if (accion === 'generar') {
+        usuario('Genera la plantilla Scrum');
+        generar();
+      } else if (accion === 'adjuntar') {
+        $('archivos').click();
+      } else if (accion === 'ejemplo') {
+        usuario('Usa los casos de ejemplo');
+        cargarEjemplo();
+      } else if (accion.startsWith('descargar-')) {
+        const [, formato, id] = accion.match(/^descargar-(md|json|csv|html)-(.+)$/) || [];
+        descargarPlantilla(PLANTILLAS.get(id), formato);
+      } else if (accion.startsWith('exportar-')) {
+        const [, destino, id] = accion.match(/^exportar-(trello|jira)-(.+)$/) || [];
+        exportarA(destino, PLANTILLAS.get(id));
+      } else if (accion === 'preguntar-actores') {
+        usuario('¿Qué actores participan en los casos de uso?');
+        preguntar('¿Qué actores participan en los casos de uso?');
+      }
     });
 
-    $('guardar').onclick = async () => {
-      setBusy(true, 'Guardando en SQLite…');
-      try {
-        await api('/api/documentos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            proyecto: proyecto(),
-            titulo: $('titulo').value,
-            tipo: $('tipo').value,
-            contenido: $('contenido').value,
-          }),
-        });
-        $('contenido').value = '';
-        await pintarDocumentos();
-      } catch (error) {
-        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
-      } finally {
-        setBusy(false);
-      }
+    // ---------- Plantilla ----------
+    function lista(items, render) {
+      const values = Array.isArray(items) ? items.filter(Boolean) : [];
+      if (!values.length) return '<p class="muted small">No consta en los manuales.</p>';
+      return `<ul>${values.map((item) => `<li>${render(item)}</li>`).join('')}</ul>`;
+    }
+
+    function conFuente(item) {
+      if (typeof item === 'string') return escapeHtml(item);
+      const principal = item.nombre
+        ? `<strong>${escapeHtml(item.nombre)}</strong>${item.descripcion ? `: ${escapeHtml(item.descripcion)}` : ''}`
+        : escapeHtml(item.texto || item.descripcion || '');
+      const fuente = item.fuente_documento ? ` <span class="source">(${escapeHtml(item.fuente_documento)})</span>` : '';
+      return principal + fuente;
+    }
+
+    function mostrarPlantilla(plantilla, intro) {
+      const id = crypto.randomUUID();
+      PLANTILLAS.set(id, plantilla);
+      const fases = plantilla.fases || {};
+      const inicio = (fases.inicio && fases.inicio.analisis) || {};
+      const backlog = (fases.backlog && fases.backlog.analisis && fases.backlog.analisis.product_backlog) || [];
+      const calidad = (fases.calidad && fases.calidad.analisis) || {};
+      const pasos = plantilla.pasos_del_proyecto || [];
+      const ceremonias = calidad.ceremonias || {};
+      const roles = calidad.roles || {};
+      const puntos = backlog.reduce((total, item) => total + (Number(item.story_points) || 0), 0);
+      const nc = 'No consta en los manuales';
+
+      const filas = backlog.map((item) => `
+        <tr>
+          <td><strong>${escapeHtml(item.id)}</strong></td>
+          <td>
+            <strong>${escapeHtml(item.titulo)}</strong><br>${escapeHtml(item.historia)}
+            ${item.criterios_aceptacion && item.criterios_aceptacion.length ? `<details><summary>Criterios de aceptación (${item.criterios_aceptacion.length})</summary>${lista(item.criterios_aceptacion, escapeHtml)}</details>` : ''}
+            <div class="source">Fuente: ${escapeHtml(item.fuente_documento)}</div>
+            ${item.advertencia ? `<div class="warn small">${escapeHtml(item.advertencia)}</div>` : ''}
+          </td>
+          <td>${escapeHtml(item.prioridad)}</td>
+          <td>${escapeHtml(item.story_points)}</td>
+          <td>${escapeHtml(NOMBRE_FASE[item.fase_proyecto] || item.fase_proyecto)}</td>
+        </tr>`).join('');
+
+      const plan = pasos.map((paso) => `
+        <div class="card">
+          <strong>${escapeHtml(NOMBRE_FASE[paso.fase] || paso.fase)}</strong>
+          ${paso.objetivo ? `<div class="small">${escapeHtml(paso.objetivo)}</div>` : ''}
+          ${lista(paso.sprints, (sprint) => `<strong>Sprint ${escapeHtml(sprint.sprint_numero)}</strong>${sprint.duracion_dias ? ` · ${escapeHtml(sprint.duracion_dias)} días` : ''}${sprint.objetivo ? ` — ${escapeHtml(sprint.objetivo)}` : ''}
+            <br><span class="muted small">Historias: ${escapeHtml((sprint.historias || []).join(', ') || 'ninguna')}</span>`)}
+        </div>`).join('');
+
+      asistente(`
+        <p>${intro}</p>
+        <p class="muted small">${escapeHtml(plantilla.modelo)} · ${new Date(plantilla.generado_en).toLocaleString('es')} · Basada en: ${escapeHtml((plantilla.documentos_base || []).map((doc) => doc.titulo).join(', '))}</p>
+        ${(plantilla.base_conocimiento || []).length ? `<p class="muted small">📚 Base de conocimiento consultada: ${escapeHtml(plantilla.base_conocimiento.join(', '))}</p>` : ''}
+
+        <h3>🎯 Visión del producto</h3>
+        <p>${escapeHtml(inicio.vision || nc)}</p>
+        <h3>👥 Actores</h3>
+        ${lista(inicio.actores, conFuente)}
+        <h3>Objetivos</h3>
+        ${lista(inicio.objetivos, conFuente)}
+        <h3>Alcance</h3>
+        <p class="small"><strong>Dentro:</strong></p>${lista(inicio.dentro_de_alcance, conFuente)}
+        <p class="small"><strong>Fuera:</strong></p>${lista(inicio.fuera_de_alcance, conFuente)}
+
+        <h3>📋 Product backlog · ${backlog.length} historias · ${puntos} story points</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Historia de usuario</th><th>Prioridad</th><th>Pts</th><th>Fase</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+
+        ${plantilla.tablero ? tableroHtml(plantilla.tablero) : `<h3>🗓️ Fases y sprints</h3>${plan || `<p class="muted small">${nc}</p>`}`}
+
+        <h3>✅ Definition of Done</h3>
+        ${lista(calidad.definition_of_done, conFuente)}
+        <h3>Definition of Ready</h3>
+        ${lista(calidad.definition_of_ready, conFuente)}
+        <h3>🔗 Dependencias</h3>
+        ${lista(calidad.dependencias, (dep) => `${escapeHtml(dep.origen)} → ${escapeHtml(dep.destino)}: ${escapeHtml(dep.motivo)}`)}
+        <h3>⚠️ Riesgos</h3>
+        ${lista(calidad.riesgos, conFuente)}
+        <h3>Roles</h3>
+        <ul>
+          <li><strong>Product Owner:</strong> ${escapeHtml(roles.product_owner || nc)}</li>
+          <li><strong>Scrum Master:</strong> ${escapeHtml(roles.scrum_master || nc)}</li>
+          <li><strong>Equipo:</strong> ${escapeHtml(roles.equipo || nc)}</li>
+        </ul>
+        <h3>Ceremonias</h3>
+        <ul>
+          <li><strong>Sprint Planning:</strong> ${escapeHtml(ceremonias.sprint_planning || nc)}</li>
+          <li><strong>Daily:</strong> ${escapeHtml(ceremonias.daily || nc)}</li>
+          <li><strong>Review:</strong> ${escapeHtml(ceremonias.review || nc)}</li>
+          <li><strong>Retrospectiva:</strong> ${escapeHtml(ceremonias.retrospectiva || nc)}</li>
+        </ul>
+        ${botones([
+          ...(plantilla.tablero ? [
+            [`exportar-trello-${id}`, '📤 Crear en Trello', true],
+            [`exportar-jira-${id}`, '📤 Crear en Jira', true],
+            [`descargar-html-${id}`, '🗂️ Tablero independiente (HTML)'],
+          ] : []),
+          [`descargar-md-${id}`, '⬇ Descargar Markdown', !plantilla.tablero],
+          ...(plantilla.tablero ? [[`descargar-csv-${id}`, '⬇ CSV para Jira / Trello']] : []),
+          [`descargar-json-${id}`, '⬇ Descargar JSON'],
+          ['generar', '↻ Generar de nuevo'],
+        ])}
+      `);
+    }
+
+    const ROL_COLOR = {
+      product_owner: ['#efe4fb', '#6a3fa0'],
+      scrum_master: ['#fde7ef', '#a03563'],
+      analista: ['#e6f0fb', '#2f5f9e'],
+      desarrollador_backend: ['#e2f0eb', '#0f6e56'],
+      desarrollador_frontend: ['#fff1dc', '#9a5b06'],
+      qa: ['#fde8e6', '#b0392e'],
+      devops: ['#eceae6', '#4d4a44'],
     };
 
-    $('indexar').onclick = async () => {
-      setBusy(true, 'Ollama está calculando embeddings y guardándolos en la base…');
-      try {
-        const data = await api('/api/indexar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proyecto: proyecto() }),
-        });
-        $('resultado').innerHTML = `<p>Indexados ${data.documentos.length} documentos.</p><pre>${JSON.stringify(data, null, 2)}</pre>`;
-        await pintarSalud();
-      } catch (error) {
-        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
-      } finally {
-        setBusy(false);
-      }
-    };
+    function chipRol(tarea) {
+      const [fondo, texto] = ROL_COLOR[tarea.rol] || ROL_COLOR.devops;
+      return `<span class="chip" style="background:${fondo};color:${texto}" title="${escapeHtml(tarea.rol_nombre || tarea.rol)}">${escapeHtml(tarea.responsable || tarea.rol_nombre || tarea.rol)}</span>`;
+    }
 
-    $('generar').onclick = async () => {
-      setBusy(true, 'Hermes está leyendo la base por fases. En una RX puede tardar varios minutos.');
-      try {
-        const data = await api('/api/plantilla', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proyecto: proyecto(), nombre: 'Scrum ' + proyecto() }),
-        });
-        pintarPlantilla(data.plantilla);
-      } catch (error) {
-        $('resultado').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
-      } finally {
-        setBusy(false);
-      }
-    };
+    function fechaCorta(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+    }
 
-    $('preguntar').onclick = async () => {
-      setBusy(true, 'Buscando fragmentos en la base…');
-      try {
-        const data = await api('/api/consultar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proyecto: proyecto(), pregunta: $('pregunta').value }),
-        });
-        const texto = data.respuesta.respuesta || JSON.stringify(data.respuesta, null, 2);
-        $('respuesta').innerHTML = `<p>${escapeHtml(texto)}</p>`;
-      } catch (error) {
-        $('respuesta').innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
-      } finally {
-        setBusy(false);
-      }
-    };
+    function tarjetaHistoria(historia) {
+      const prioridad = String(historia.prioridad || '').toLowerCase();
+      return `<div class="ticket">
+        <div class="ticket-top">
+          <span class="label ${escapeHtml(prioridad)}" title="Prioridad ${escapeHtml(historia.prioridad || '')}"></span>
+          <span class="ticket-id">${escapeHtml(historia.id)}</span>
+          <span class="ticket-meta">${escapeHtml(historia.story_points)} pts · ${escapeHtml(historia.horas)} h</span>
+        </div>
+        <strong>${escapeHtml(historia.titulo)}</strong>
+        <ul class="tasks">${(historia.tareas || []).map((tarea) => `
+          <li><span class="task-title">☐ ${escapeHtml(tarea.titulo)}</span>${chipRol(tarea)}<span class="hours">${escapeHtml(tarea.horas)} h</span></li>`).join('')}
+        </ul>
+      </div>`;
+    }
 
-    pintarFlujo().catch((error) => {
-      $('flujo').innerHTML = `<li class="error">${escapeHtml(error.message)}</li>`;
+    function tableroHtml(tablero) {
+      const historias = tablero.historias || [];
+      const sinSprint = historias.filter((historia) => !historia.sprint);
+      const columnas = [
+        ...(sinSprint.length ? [{ titulo: 'Product backlog', sub: 'Sin sprint asignado', historias: sinSprint }] : []),
+        ...(tablero.sprints || []).map((sprint) => {
+          const delSprint = historias.filter((historia) => historia.sprint === sprint.numero);
+          const pts = delSprint.reduce((total, historia) => total + (Number(historia.story_points) || 0), 0);
+          const horas = delSprint.reduce((total, historia) => total + (Number(historia.horas) || 0), 0);
+          return {
+            titulo: sprint.nombre,
+            contador: `${pts} pts · ${horas} h`,
+            sub: `${fechaCorta(sprint.inicio)} – ${fechaCorta(sprint.fin)} · ${sprint.dias_habiles} días hábiles${sprint.objetivo && sprint.objetivo !== 'null' ? ` · ${sprint.objetivo}` : ''}`,
+            historias: delSprint,
+          };
+        }),
+      ];
+
+      const sprints = tablero.sprints || [];
+      const carga = (tablero.carga || []).map((fila) => `
+        <tr>
+          <td>${chipRol({ rol: fila.rol, responsable: fila.responsable, rol_nombre: fila.nombre })}<div class="small muted">${escapeHtml(fila.nombre)}</div></td>
+          ${fila.por_sprint.map((celda) => {
+            const porcentaje = celda.capacidad ? Math.round((celda.horas / celda.capacidad) * 100) : 0;
+            return `<td>${celda.horas} / ${celda.capacidad} h<div class="load-bar${porcentaje > 100 ? ' over' : ''}"><i style="width:${Math.min(porcentaje, 100)}%"></i></div></td>`;
+          }).join('')}
+          <td><strong>${fila.horas_total} h</strong></td>
+        </tr>`).join('');
+
+      return `
+        <h3>🗂️ Tablero del proyecto (estilo Jira / Trello)</h3>
+        <div class="board-summary">
+          <span>📅 ${fechaCorta(tablero.inicio_proyecto)} → ${fechaCorta(tablero.fin_proyecto)}</span>
+          <span>🏃 ${sprints.length} sprint${sprints.length === 1 ? '' : 's'}</span>
+          <span>📌 ${historias.length} historias · ${historias.reduce((total, historia) => total + (historia.tareas || []).length, 0)} tareas</span>
+          <span>⭐ ${tablero.total_puntos} pts</span>
+          <span>⏱ ${tablero.total_horas} h</span>
+        </div>
+        <div class="board">${columnas.map((columna) => `
+          <div class="column">
+            <div class="column-head"><span>${escapeHtml(columna.titulo)}</span><span class="muted">${escapeHtml(columna.contador || `${columna.historias.length}`)}</span></div>
+            <div class="column-sub">${escapeHtml(columna.sub)}</div>
+            ${columna.historias.map(tarjetaHistoria).join('') || '<p class="muted small">Sin historias</p>'}
+          </div>`).join('')}
+        </div>
+        <p class="small muted">Todas las tareas empiezan en «Por hacer». Al importarlas en Jira o Trello pasan por: ${escapeHtml((tablero.columnas || []).join(' → '))}.</p>
+
+        <h3>👥 Distribución del trabajo por persona</h3>
+        <table>
+          <thead><tr><th>Responsable</th>${sprints.map((sprint) => `<th>${escapeHtml(sprint.nombre)}</th>`).join('')}<th>Total</th></tr></thead>
+          <tbody>${carga}</tbody>
+        </table>
+        <p class="small muted">Capacidad: ${escapeHtml(tablero.horas_por_dia)} h por día hábil por persona.</p>
+        ${(tablero.avisos || []).length ? `<ul>${tablero.avisos.map((aviso) => `<li class="warn small">${escapeHtml(aviso)}</li>`).join('')}</ul>` : ''}`;
+    }
+
+    function csvCelda(value) {
+      const text = String(value ?? '');
+      return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function jiraCsv(plantilla) {
+      const tablero = plantilla.tablero || {};
+      const prioridad = { alta: 'High', media: 'Medium', baja: 'Low' };
+      const sprintNombre = (numero) => {
+        const sprint = (tablero.sprints || []).find((item) => item.numero === numero);
+        return sprint ? sprint.nombre : '';
+      };
+      const filas = [['Issue Id', 'Parent Id', 'Issue Type', 'Summary', 'Description', 'Priority', 'Story Points', 'Sprint', 'Assignee', 'Labels', 'Original Estimate', 'Start Date', 'Due Date']];
+      let numero = 1;
+      for (const historia of tablero.historias || []) {
+        const sprint = (tablero.sprints || []).find((item) => item.numero === historia.sprint) || {};
+        const padre = numero;
+        numero += 1;
+        filas.push([
+          padre, '', 'Story', `${historia.id} ${historia.titulo}`, historia.historia || '',
+          prioridad[String(historia.prioridad || '').toLowerCase()] || 'Medium',
+          historia.story_points, sprintNombre(historia.sprint), '', 'historia',
+          (historia.horas || 0) * 3600, sprint.inicio || '', sprint.fin || '',
+        ]);
+        for (const tarea of historia.tareas || []) {
+          filas.push([
+            numero, padre, 'Sub-task', `${tarea.id} ${tarea.titulo}`, '',
+            prioridad[String(historia.prioridad || '').toLowerCase()] || 'Medium',
+            '', sprintNombre(historia.sprint), tarea.asignado ?? (tarea.responsable !== tarea.rol_nombre ? tarea.responsable : ''), tarea.rol,
+            (tarea.horas || 0) * 3600, sprint.inicio || '', sprint.fin || '',
+          ]);
+          numero += 1;
+        }
+      }
+      return '\uFEFF' + filas.map((fila) => fila.map(csvCelda).join(',')).join('\r\n');
+    }
+
+    const TABLERO_CSS = `
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: #f4f5f7; color: #172b4d; }
+      header { background: #0f6e56; color: #fff; padding: 16px 24px; }
+      header h1 { margin: 0 0 4px; font-size: 1.3rem; }
+      header p { margin: 0; opacity: .9; font-size: .9rem; }
+      .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid #dfe1e6; position: sticky; top: 0; z-index: 2; }
+      .tab { border: 1px solid #dfe1e6; background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: .85rem; }
+      .tab.on { background: #0f6e56; color: #fff; border-color: #0f6e56; }
+      .bar select, .bar button.tool { border: 1px solid #dfe1e6; border-radius: 6px; padding: 6px 10px; background: #fff; font-size: .85rem; cursor: pointer; }
+      .grow { flex: 1; }
+      .progress { min-width: 220px; font-size: .8rem; color: #5e6c84; }
+      .meter { height: 8px; background: #dfe1e6; border-radius: 4px; overflow: hidden; margin-top: 3px; }
+      .meter i { display: block; height: 100%; background: #36b37e; }
+      .info { padding: 10px 24px 0; font-size: .85rem; color: #5e6c84; }
+      .board { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 12px; padding: 12px 24px 24px; overflow-x: auto; }
+      .col { background: #ebecf0; border-radius: 8px; padding: 8px; min-height: 200px; }
+      .col.over { outline: 2px dashed #0f6e56; }
+      .col h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #5e6c84; margin: 4px 4px 8px; display: flex; justify-content: space-between; }
+      .card { background: #fff; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; box-shadow: 0 1px 1px rgba(9,30,66,.25); cursor: grab; font-size: .85rem; }
+      .card.done .title { text-decoration: line-through; color: #5e6c84; }
+      .card .story { font-size: .72rem; color: #5e6c84; display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+      .label { width: 26px; height: 6px; border-radius: 3px; background: #b3bac5; flex: none; }
+      .label.alta { background: #eb5a46; } .label.media { background: #f2d600; } .label.baja { background: #61bd4f; }
+      .meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+      .chip { border-radius: 999px; padding: 1px 8px; font-size: .72rem; font-weight: 600; background: #e2f0eb; color: #0f6e56; }
+      .hours { font-size: .75rem; color: #5e6c84; margin-left: auto; }
+      .move { border: 0; background: #f4f5f7; border-radius: 4px; cursor: pointer; padding: 0 6px; font-size: .75rem; }
+      section { padding: 0 24px 24px; }
+      section h3 { font-size: 1rem; margin: 18px 0 8px; }
+      table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; font-size: .85rem; }
+      th, td { padding: 8px 10px; border-bottom: 1px solid #ebecf0; text-align: left; vertical-align: top; }
+      th { background: #fafbfc; color: #5e6c84; font-weight: 600; }
+      .small { font-size: .78rem; color: #5e6c84; }
+      @media print { .bar, .move { display: none; } .board { grid-template-columns: repeat(4, 1fr); } }
+    `;
+
+    function tableroApp() {
+      const data = JSON.parse(document.getElementById('datos').textContent);
+      const t = data.tablero;
+      const columnas = t.columnas && t.columnas.length ? t.columnas : ['Por hacer', 'En progreso', 'En revisión', 'Hecho'];
+      const hecho = columnas[columnas.length - 1];
+      const clave = `tablero:${data.proyecto}:${data.generado_en}`;
+      let estados = JSON.parse(localStorage.getItem(clave) || '{}');
+      let sprintActivo = t.sprints.length ? String(t.sprints[0].numero) : 'todos';
+      let persona = '';
+      const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const tareas = t.historias.flatMap((historia) => historia.tareas.map((tarea) => ({ ...tarea, historia })));
+      const columnaDe = (tarea) => estados[tarea.id] || tarea.estado || columnas[0];
+      const guardar = () => localStorage.setItem(clave, JSON.stringify(estados));
+      const fecha = (iso) => {
+        if (!iso) return '';
+        const [y, m, d] = iso.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+      };
+
+      function visibles() {
+        return tareas.filter((tarea) => (
+          (sprintActivo === 'todos' || (sprintActivo === 'backlog' ? !tarea.sprint : String(tarea.sprint) === sprintActivo))
+          && (!persona || tarea.responsable === persona)
+        ));
+      }
+
+      function mover(id, columna) {
+        estados[id] = columna;
+        guardar();
+        render();
+      }
+
+      function render() {
+        const lista = visibles();
+        const totalHoras = lista.reduce((total, tarea) => total + tarea.horas, 0);
+        const horasHechas = lista.filter((tarea) => columnaDe(tarea) === hecho).reduce((total, tarea) => total + tarea.horas, 0);
+        const porcentaje = totalHoras ? Math.round((horasHechas / totalHoras) * 100) : 0;
+        const sprint = t.sprints.find((item) => String(item.numero) === sprintActivo);
+        const personas = [...new Set(tareas.map((tarea) => tarea.responsable))].sort();
+        const sinSprint = tareas.some((tarea) => !tarea.sprint);
+
+        document.getElementById('app').innerHTML = `
+          <div class="bar">
+            ${t.sprints.map((item) => `<button class="tab${String(item.numero) === sprintActivo ? ' on' : ''}" data-sprint="${item.numero}">${esc(item.nombre)}</button>`).join('')}
+            ${sinSprint ? `<button class="tab${sprintActivo === 'backlog' ? ' on' : ''}" data-sprint="backlog">Backlog</button>` : ''}
+            <button class="tab${sprintActivo === 'todos' ? ' on' : ''}" data-sprint="todos">Todos</button>
+            <select id="persona"><option value="">Todas las personas</option>${personas.map((nombre) => `<option${nombre === persona ? ' selected' : ''}>${esc(nombre)}</option>`).join('')}</select>
+            <span class="grow"></span>
+            <div class="progress">${horasHechas} de ${totalHoras} h hechas (${porcentaje} %)<div class="meter"><i style="width:${porcentaje}%"></i></div></div>
+            <button class="tool" id="exportar">⬇ Guardar avance (JSON)</button>
+            <button class="tool" id="imprimir">🖨 Imprimir</button>
+            <button class="tool" id="reiniciar">↺ Reiniciar</button>
+          </div>
+          ${sprint ? `<div class="info"><strong>${esc(sprint.nombre)}</strong> · ${fecha(sprint.inicio)} – ${fecha(sprint.fin)} · ${sprint.dias_habiles} días hábiles${sprint.objetivo ? ` · Objetivo: ${esc(sprint.objetivo)}` : ''}</div>` : ''}
+          <div class="board">${columnas.map((columna) => {
+            const delaColumna = lista.filter((tarea) => columnaDe(tarea) === columna);
+            return `<div class="col" data-col="${esc(columna)}">
+              <h2><span>${esc(columna)}</span><span>${delaColumna.length} · ${delaColumna.reduce((total, tarea) => total + tarea.horas, 0)} h</span></h2>
+              ${delaColumna.map((tarea) => {
+                const indice = columnas.indexOf(columna);
+                return `<div class="card${columna === hecho ? ' done' : ''}" draggable="true" data-id="${esc(tarea.id)}">
+                  <div class="story"><span class="label ${esc(String(tarea.historia.prioridad || '').toLowerCase())}"></span>${esc(tarea.historia.id)} · ${esc(tarea.historia.titulo)}</div>
+                  <div class="title">${esc(tarea.titulo)}</div>
+                  <div class="meta">
+                    <span class="chip" title="${esc(tarea.rol_nombre)}">${esc(tarea.responsable)}</span>
+                    <span class="hours">${tarea.horas} h</span>
+                    ${indice > 0 ? `<button class="move" data-mover="${esc(tarea.id)}" data-a="${esc(columnas[indice - 1])}" title="Mover a ${esc(columnas[indice - 1])}">◀</button>` : ''}
+                    ${indice < columnas.length - 1 ? `<button class="move" data-mover="${esc(tarea.id)}" data-a="${esc(columnas[indice + 1])}" title="Mover a ${esc(columnas[indice + 1])}">▶</button>` : ''}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>`;
+          }).join('')}</div>
+          <section>
+            <h3>Historias de usuario</h3>
+            <table><thead><tr><th>ID</th><th>Historia</th><th>Prioridad</th><th>Puntos</th><th>Sprint</th><th>Avance</th></tr></thead><tbody>
+            ${t.historias.map((historia) => {
+              const total = historia.tareas.length;
+              const listas = historia.tareas.filter((tarea) => columnaDe(tarea) === hecho).length;
+              const nombreSprint = (t.sprints.find((item) => item.numero === historia.sprint) || {}).nombre || 'Backlog';
+              return `<tr><td><strong>${esc(historia.id)}</strong></td><td><strong>${esc(historia.titulo)}</strong><div class="small">${esc(historia.historia)}</div></td>
+                <td>${esc(historia.prioridad)}</td><td>${esc(historia.story_points)}</td><td>${esc(nombreSprint)}</td>
+                <td>${listas}/${total} tareas<div class="meter"><i style="width:${total ? Math.round((listas / total) * 100) : 0}%"></i></div></td></tr>`;
+            }).join('')}
+            </tbody></table>
+            <h3>Distribución del trabajo</h3>
+            <table><thead><tr><th>Responsable</th>${t.sprints.map((item) => `<th>${esc(item.nombre)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+            ${(t.carga || []).map((fila) => `<tr><td><strong>${esc(fila.responsable)}</strong><div class="small">${esc(fila.nombre)}</div></td>
+              ${fila.por_sprint.map((celda) => `<td>${celda.horas} / ${celda.capacidad} h</td>`).join('')}<td><strong>${fila.horas_total} h</strong></td></tr>`).join('')}
+            </tbody></table>
+            <p class="small">El avance se guarda en este navegador. Usa «Guardar avance» para tener una copia en archivo.</p>
+          </section>`;
+      }
+
+      document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.dataset.sprint) { sprintActivo = target.dataset.sprint; render(); }
+        else if (target.dataset.mover) mover(target.dataset.mover, target.dataset.a);
+        else if (target.id === 'imprimir') window.print();
+        else if (target.id === 'reiniciar' && confirm('¿Volver todas las tareas a «Por hacer»?')) { estados = {}; guardar(); render(); }
+        else if (target.id === 'exportar') {
+          const copia = JSON.parse(JSON.stringify(data));
+          copia.tablero.historias.forEach((historia) => historia.tareas.forEach((tarea) => { tarea.estado = columnaDe(tarea); }));
+          const enlace = document.createElement('a');
+          enlace.href = URL.createObjectURL(new Blob([JSON.stringify(copia, null, 2)], { type: 'application/json' }));
+          enlace.download = `avance-${String(data.proyecto).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.json`;
+          document.body.appendChild(enlace);
+          enlace.click();
+          enlace.remove();
+        }
+      });
+      document.addEventListener('change', (event) => {
+        if (event.target.id === 'persona') { persona = event.target.value; render(); }
+      });
+      document.addEventListener('dragstart', (event) => {
+        const card = event.target.closest && event.target.closest('.card');
+        if (card) event.dataTransfer.setData('text/plain', card.dataset.id);
+      });
+      document.addEventListener('dragover', (event) => {
+        const col = event.target.closest && event.target.closest('.col');
+        if (!col) return;
+        event.preventDefault();
+        document.querySelectorAll('.col.over').forEach((item) => item.classList.remove('over'));
+        col.classList.add('over');
+      });
+      document.addEventListener('drop', (event) => {
+        const col = event.target.closest && event.target.closest('.col');
+        if (!col) return;
+        event.preventDefault();
+        const id = event.dataTransfer.getData('text/plain');
+        if (id) mover(id, col.dataset.col);
+      });
+      render();
+    }
+
+    function tableroIndependiente(plantilla) {
+      const tablero = plantilla.tablero;
+      const datos = JSON.stringify({
+        proyecto: plantilla.proyecto,
+        generado_en: plantilla.generado_en,
+        modelo: plantilla.modelo,
+        tablero,
+      }).replace(/</g, '\\u003c');
+      const cierre = '</' + 'script>';
+      return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero Scrum — ${escapeHtml(plantilla.proyecto)}</title>
+<style>${TABLERO_CSS}</style>
+</head>
+<body>
+<header>
+  <h1>Tablero Scrum — ${escapeHtml(plantilla.proyecto)}</h1>
+  <p>${escapeHtml(fechaCorta(tablero.inicio_proyecto))} → ${escapeHtml(fechaCorta(tablero.fin_proyecto))} · ${(tablero.sprints || []).length} sprints · ${escapeHtml(tablero.total_puntos)} story points · ${escapeHtml(tablero.total_horas)} horas · Generado con ${escapeHtml(plantilla.modelo)}</p>
+</header>
+<div id="app"></div>
+<script type="application/json" id="datos">${datos}${cierre}
+<script>(${tableroApp.toString()})();${cierre}
+</body>
+</html>`;
+    }
+
+    function tableroMarkdown(tablero) {
+      if (!tablero) return [];
+      const celda = (value) => String(value ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const historias = tablero.historias || [];
+      return [
+        '## Tablero del proyecto', '',
+        `Del ${tablero.inicio_proyecto} al ${tablero.fin_proyecto} · ${(tablero.sprints || []).length} sprints · ${tablero.total_puntos} story points · ${tablero.total_horas} horas`, '',
+        ...(tablero.sprints || []).flatMap((sprint) => {
+          const delSprint = historias.filter((historia) => historia.sprint === sprint.numero);
+          return [
+            `### ${sprint.nombre} · ${sprint.inicio} → ${sprint.fin} (${sprint.dias_habiles} días hábiles)`, '',
+            ...(sprint.objetivo && sprint.objetivo !== 'null' ? [`Objetivo: ${sprint.objetivo}`, ''] : []),
+            '| Historia | Tarea | Responsable | Horas | Estado |',
+            '|----------|-------|-------------|-------|--------|',
+            ...delSprint.flatMap((historia) => (historia.tareas || []).map((tarea) => (
+              `| ${celda(historia.id)} ${celda(historia.titulo)} | ${celda(tarea.titulo)} | ${celda(tarea.responsable)} | ${celda(tarea.horas)} | ${celda(tarea.estado)} |`
+            ))),
+            '',
+          ];
+        }),
+        '## Distribución del trabajo', '',
+        `| Responsable | ${(tablero.sprints || []).map((sprint) => celda(sprint.nombre)).join(' | ')} | Total |`,
+        `|---|${(tablero.sprints || []).map(() => '---').join('|')}|---|`,
+        ...(tablero.carga || []).map((fila) => `| ${celda(fila.responsable)} (${celda(fila.nombre)}) | ${fila.por_sprint.map((item) => `${item.horas}/${item.capacidad} h`).join(' | ')} | ${fila.horas_total} h |`),
+        '',
+        ...((tablero.avisos || []).length ? ['**Avisos:**', '', ...tablero.avisos.map((aviso) => `- ${aviso}`), ''] : []),
+      ];
+    }
+
+    function textoDe(item) {
+      if (typeof item === 'string') return item;
+      const base = item.nombre ? `${item.nombre}${item.descripcion ? `: ${item.descripcion}` : ''}` : (item.texto || '');
+      return item.fuente_documento ? `${base} _(${item.fuente_documento})_` : base;
+    }
+
+    function mdLista(items) {
+      const values = Array.isArray(items) ? items.filter(Boolean) : [];
+      return values.length ? values.map((item) => `- ${textoDe(item)}`).join('\n') : '- No consta en los manuales';
+    }
+
+    function plantillaMarkdown(plantilla) {
+      const fases = plantilla.fases || {};
+      const inicio = (fases.inicio && fases.inicio.analisis) || {};
+      const backlog = (fases.backlog && fases.backlog.analisis && fases.backlog.analisis.product_backlog) || [];
+      const calidad = (fases.calidad && fases.calidad.analisis) || {};
+      const roles = calidad.roles || {};
+      const ceremonias = calidad.ceremonias || {};
+      const nc = 'No consta en los manuales';
+      const celda = (value) => String(value ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      return [
+        `# Plantilla Scrum — ${plantilla.proyecto}`,
+        '',
+        `Generada el ${new Date(plantilla.generado_en).toLocaleString('es')} con ${plantilla.modelo}.`,
+        `Documentos base: ${(plantilla.documentos_base || []).map((doc) => doc.titulo).join(', ')}`,
+        ...((plantilla.base_conocimiento || []).length ? [`Base de conocimiento consultada: ${plantilla.base_conocimiento.join(', ')}`] : []),
+        '',
+        '## Visión del producto', '', inicio.vision || nc, '',
+        '## Actores', '', mdLista(inicio.actores), '',
+        '## Objetivos', '', mdLista(inicio.objetivos), '',
+        '## Dentro del alcance', '', mdLista(inicio.dentro_de_alcance), '',
+        '## Fuera del alcance', '', mdLista(inicio.fuera_de_alcance), '',
+        '## Product backlog', '',
+        '| ID | Título | Historia | Prioridad | Story points | Fase | Fuente |',
+        '|----|--------|----------|-----------|--------------|------|--------|',
+        ...backlog.map((item) => `| ${celda(item.id)} | ${celda(item.titulo)} | ${celda(item.historia)} | ${celda(item.prioridad)} | ${celda(item.story_points)} | ${celda(NOMBRE_FASE[item.fase_proyecto] || item.fase_proyecto)} | ${celda(item.fuente_documento)} |`),
+        '',
+        '### Criterios de aceptación', '',
+        ...backlog.flatMap((item) => [`**${item.id} — ${item.titulo}**`, '', mdLista(item.criterios_aceptacion), '']),
+        '## Plan de fases y sprints', '',
+        ...(plantilla.pasos_del_proyecto || []).flatMap((paso) => [
+          `### ${NOMBRE_FASE[paso.fase] || paso.fase}`,
+          '',
+          paso.objetivo || '',
+          '',
+          ...(paso.sprints || []).map((sprint) => `- **Sprint ${sprint.sprint_numero}**${sprint.duracion_dias ? ` (${sprint.duracion_dias} días)` : ''}: ${sprint.objetivo || ''} — Historias: ${(sprint.historias || []).join(', ')}`),
+          '',
+        ]),
+        ...tableroMarkdown(plantilla.tablero),
+        '## Definition of Done', '', mdLista(calidad.definition_of_done), '',
+        '## Definition of Ready', '', mdLista(calidad.definition_of_ready), '',
+        '## Dependencias', '',
+        mdLista((calidad.dependencias || []).map((dep) => `${dep.origen} → ${dep.destino}: ${dep.motivo || ''}`)), '',
+        '## Riesgos', '', mdLista(calidad.riesgos), '',
+        '## Roles', '',
+        `- **Product Owner:** ${roles.product_owner || nc}`,
+        `- **Scrum Master:** ${roles.scrum_master || nc}`,
+        `- **Equipo:** ${roles.equipo || nc}`,
+        '',
+        '## Ceremonias', '',
+        `- **Sprint Planning:** ${ceremonias.sprint_planning || nc}`,
+        `- **Daily:** ${ceremonias.daily || nc}`,
+        `- **Review:** ${ceremonias.review || nc}`,
+        `- **Retrospectiva:** ${ceremonias.retrospectiva || nc}`,
+        '',
+      ].join('\n');
+    }
+
+    function descargarPlantilla(plantilla, formato) {
+      if (!plantilla || !formato) {
+        asistente('<p class="error">No encontré esa plantilla para descargarla. Ábrela otra vez desde «Plantillas generadas» con el botón Ver.</p>');
+        return;
+      }
+      const base = String(plantilla.proyecto || 'proyecto')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      const [contenido, tipo] = formato === 'md'
+        ? [plantillaMarkdown(plantilla), 'text/markdown;charset=utf-8']
+        : formato === 'csv'
+          ? [jiraCsv(plantilla), 'text/csv;charset=utf-8']
+          : formato === 'html'
+            ? [tableroIndependiente(plantilla), 'text/html;charset=utf-8']
+            : [JSON.stringify(plantilla, null, 2), 'application/json'];
+      const url = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `plantilla-scrum-${base}.${formato}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    async function exportarA(destino, plantilla) {
+      if (!plantilla || !destino) {
+        asistente('<p class="error">No encontré esa plantilla. Ábrela otra vez desde «Plantillas generadas» con el botón Ver.</p>');
+        return;
+      }
+      const nombre = destino === 'trello' ? 'Trello' : 'Jira';
+      usuario(`Crea el tablero en ${nombre}`);
+      setBusy(true);
+      const burbuja = pensando(`Conectando con ${nombre}…`);
+      const project = plantilla.proyecto;
+      const timer = setInterval(async () => {
+        const data = await api('/api/progreso?proyecto=' + encodeURIComponent(project)).catch(() => null);
+        if (data && data.mensaje) {
+          burbuja.innerHTML = `<span class="typing"><i></i><i></i><i></i></span><span class="muted">${escapeHtml(data.mensaje)}</span>`;
+        }
+      }, 1200);
+      try {
+        const data = await postJson('/api/exportar', {
+          destino,
+          plantilla: { proyecto: plantilla.proyecto, modelo: plantilla.modelo, generado_en: plantilla.generado_en, tablero: plantilla.tablero },
+          credenciales: credencialesIntegracion()[destino],
+        });
+        const creadas = data.creadas || {};
+        burbuja.innerHTML = `<p>✅ Listo. Creé <strong>${escapeHtml(data.nombre)}</strong> en ${nombre}: ${creadas.historias} historias y ${creadas.tareas} tareas${creadas.sprints != null ? ` en ${creadas.sprints} sprint${creadas.sprints === 1 ? '' : 's'}` : ''}.</p>
+          <p><a href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Abrir en ${nombre} ↗</a></p>
+          ${destino === 'trello' ? '<p class="small muted">Las historias del primer sprint están en «Por hacer»; las demás en «Product backlog» con la etiqueta de su sprint. Cada tarjeta tiene la lista de tareas con responsable y horas.</p>' : ''}
+          ${(data.avisos || []).length ? `<ul>${data.avisos.map((aviso) => `<li class="warn small">${escapeHtml(aviso)}</li>`).join('')}</ul>` : ''}`;
+      } catch (error) {
+        burbuja.innerHTML = `<p class="error">No pude crear el tablero en ${nombre}: ${escapeHtml(error.message)}</p>
+          <p class="small muted">Revisa los datos en la barra lateral, sección <strong>Trello y Jira</strong>.</p>`;
+        $('integraciones-panel').open = true;
+      } finally {
+        clearInterval(timer);
+        setBusy(false);
+        scrollAbajo();
+      }
+    }
+
+    // ---------- Entrada ----------
+    function ajustarAltura() {
+      const area = $('entrada');
+      area.style.height = 'auto';
+      area.style.height = `${Math.min(area.scrollHeight, 200)}px`;
+    }
+
+    $('entrada').addEventListener('input', ajustarAltura);
+    $('entrada').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        enviar();
+      }
     });
-    pintarSalud().catch((error) => {
-      $('status').innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
-    });
-    pintarDocumentos().catch(() => {});
+    $('enviar').onclick = enviar;
+    $('menu').onclick = () => $('sidebar').classList.toggle('open');
+
+    let cambio;
+    function cambiarProyecto(saludar = true) {
+      $('subtitulo').textContent = `Proyecto: ${proyecto() || 'sin nombre'}`;
+      if (!saludar) return;
+      clearTimeout(cambio);
+      cambio = setTimeout(async () => {
+        await refrescarLateral();
+        if (BASE && proyecto() === BASE.proyecto) {
+          asistente(`<p>Estás en la <strong>📚 base de conocimiento</strong>. Tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'}.</p>
+            <p>Adjunta aquí toda la documentación de apoyo: guías Scrum, estándares de calidad, ejemplos de plantillas, manuales de buenas prácticas. Se indexa en PostgreSQL y la consulto al generar la plantilla de <strong>cualquier</strong> proyecto (para el plan, la definition of done, los roles y las ceremonias). Las historias de usuario siguen saliendo solo del manual de casos de uso de cada proyecto.</p>
+            ${botones([['adjuntar', '📎 Adjuntar documentación', true]])}`);
+        } else if (proyecto()) {
+          asistente(`<p>Cambiamos al proyecto <strong>${escapeHtml(proyecto())}</strong>. ${documentos.length
+            ? `Tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} cargado${documentos.length === 1 ? '' : 's'}.`
+            : 'Todavía no tiene documentos: adjúntalos con 📎.'}</p>
+            ${documentos.length ? botones([['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]) : botones([['adjuntar', '📎 Adjuntar manual', true]])}`);
+        }
+      }, 600);
+    }
+    $('proyecto').addEventListener('input', () => cambiarProyecto(true));
+
+    async function bienvenida() {
+      const [salud] = await Promise.all([pintarSalud(), refrescarLateral()]);
+      cambiarProyecto(false);
+      const avisos = [];
+      if (salud && !salud.base_ok) {
+        avisos.push(`<p class="error small">No puedo conectarme a la base de datos: ${escapeHtml(salud.base_error)}</p>`);
+      }
+      if (salud && salud.ollama_error) {
+        avisos.push('<p class="error small">Ollama no está respondiendo. Ábrelo antes de generar la plantilla.</p>');
+      } else if (salud && !salud.modelos_listos) {
+        avisos.push(`<p class="warn small">Aviso: falta descargar el modelo en Ollama. Ejecuta <code>ollama pull ${escapeHtml(salud.modelo_chat)}</code> antes de generar.</p>`);
+      }
+      const avisoModelo = avisos.join('');
+      asistente(`
+        <p>¡Hola! Soy <strong>Hermes</strong>, tu asistente Scrum. 👋</p>
+        <p>Dame los <strong>manuales de casos de uso</strong> de tu proyecto de software y te genero la <strong>plantilla Scrum</strong>: product backlog con historias de usuario, story points, sprints, definition of done, riesgos y ceremonias. Solo uso lo que dicen tus documentos.</p>
+        <p><strong>Cómo empezar:</strong></p>
+        <ul>
+          <li>Pulsa <strong>📎</strong> (o arrastra los archivos aquí) para adjuntar PDF, Word, TXT o Markdown.</li>
+          <li>También puedes <strong>pegar el texto</strong> de un caso de uso y enviarlo.</li>
+          <li>Después dime <em>«Genera la plantilla Scrum»</em>.</li>
+        </ul>
+        ${documentos.length ? `<p class="small muted">El proyecto <strong>${escapeHtml(proyecto())}</strong> ya tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'}.</p>` : ''}
+        ${avisoModelo}
+        ${botones(documentos.length
+          ? [['adjuntar', '📎 Adjuntar manual', true], ['generar', '✨ Generar plantilla Scrum'], ['preguntar-actores', '¿Qué actores hay?']]
+          : [['adjuntar', '📎 Adjuntar manual', true], ['ejemplo', 'Usar casos de ejemplo']])}
+      `);
+      $('entrada').focus();
+    }
+
+    bienvenida();
   </script>
 </body>
 </html>

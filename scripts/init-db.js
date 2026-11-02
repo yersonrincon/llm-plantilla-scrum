@@ -5,7 +5,7 @@
  * Carga documentos de ejemplo en la base de datos
  */
 
-const { getDb } = require('../engine/db');
+const { getPool, documentQueries, close, describeDatabase } = require('../engine/db');
 
 const sampleDocuments = [
   {
@@ -303,29 +303,30 @@ El DoD puede adaptarse según el tipo de proyecto o fase:
   }
 ];
 
-console.log('🚀 Inicializando base de datos Scrum LLM...\n');
+async function main() {
+  console.log('🚀 Inicializando base de datos Scrum LLM...\n');
+  await getPool();
+  console.log(`✓ Conectado a ${describeDatabase()}\n`);
 
-// Verificar que el directorio existe
-const db = getDb();
-console.log('✓ Conectado a la base de datos\n');
-
-// Insertar documentos de ejemplo
-const insertStmt = db.prepare(`
-  INSERT INTO documents (title, content, type, project)
-  VALUES (?, ?, ?, ?)
-`);
-
-let inserted = 0;
-for (const doc of sampleDocuments) {
-  try {
-    insertStmt.run(doc.title, doc.content, doc.type, 'general');
-    console.log(`✓ Insertado: ${doc.title}`);
-    inserted++;
-  } catch (error) {
-    console.error(`✗ Error insertando ${doc.title}:`, error.message);
+  let inserted = 0;
+  for (const doc of sampleDocuments) {
+    try {
+      await documentQueries.create(doc.title, doc.content, doc.type, 'general');
+      console.log(`✓ Insertado: ${doc.title}`);
+      inserted++;
+    } catch (error) {
+      console.error(`✗ Error insertando ${doc.title}:`, error.message);
+    }
   }
+
+  console.log(`\n✅ Inicialización completada: ${inserted}/${sampleDocuments.length} documentos insertados`);
+  console.log('\nEsos manuales quedaron en el proyecto "general".');
+  console.log('Indexa el RAG con: node engine/cli.js indexar --proyecto general\n');
 }
 
-console.log(`\n✅ Inicialización completada: ${inserted}/${sampleDocuments.length} documentos insertados`);
-console.log('\nEsos manuales quedaron en el proyecto "general".');
-console.log('Indexa el RAG con: node engine/cli.js indexar --proyecto general\n');
+main()
+  .catch((error) => {
+    console.error('✗', error.message);
+    process.exitCode = 1;
+  })
+  .finally(() => close());

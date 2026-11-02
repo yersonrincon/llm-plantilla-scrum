@@ -1,10 +1,19 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { config, assertProject } = require('./config');
+const { config, assertProject, describeDatabase } = require('./config');
 const service = require('./service');
+const integraciones = require('./integraciones');
 
 const pagePath = path.join(__dirname, 'public', 'index.html');
+const progress = new Map();
+
+function tracker(project) {
+  return (message) => {
+    console.error(message);
+    progress.set(project, String(message).trim());
+  };
+}
 
 function send(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -15,14 +24,14 @@ function send(res, status, payload) {
   res.end(body);
 }
 
-function readBody(req) {
+function readBody(req, limit = 2_000_000) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > 2_000_000) {
-        reject(Object.assign(new Error('El cuerpo supera 2 MB'), { status: 413 }));
+      if (size > limit) {
+        reject(Object.assign(new Error(`El cuerpo supera ${Math.round(limit / 1_000_000)} MB`), { status: 413 }));
         req.destroy();
         return;
       }
@@ -68,20 +77,40 @@ async function handle(req, res) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/init') {
-    send(res, 200, service.initDatabase());
+    send(res, 200, await service.initDatabase());
     return;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/documentos') {
-    send(res, 200, service.listarDocumentos(url.searchParams.get('proyecto') || ''));
+    send(res, 200, await service.listarDocumentos(url.searchParams.get('proyecto') || ''));
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/progreso') {
+    send(res, 200, { mensaje: progress.get(url.searchParams.get('proyecto') || '') || '' });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/base') {
+    send(res, 200, await service.baseConocimiento());
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/integraciones') {
+    send(res, 200, integraciones.estado());
     return;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/plantillas') {
-    send(res, 200, service.listarPlantillas(
+    send(res, 200, await service.listarPlantillas(
       url.searchParams.get('proyecto') || '',
       url.searchParams.get('id') || ''
     ));
+    return;
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/documentos') {
+    send(res, 200, await service.eliminarDocumento(url.searchParams.get('id')));
     return;
   }
 
@@ -90,26 +119,50 @@ async function handle(req, res) {
     return;
   }
 
+  if (url.pathname === '/api/extraer') {
+    send(res, 200, await service.extraerArchivo(await readBody(req, 30_000_000)));
+    return;
+  }
+
   const body = await readBody(req);
 
   if (url.pathname === '/api/documentos') {
-    send(res, 201, service.agregarDocumento(body));
+    send(res, 201, await service.agregarDocumento(body));
     return;
   }
 
   if (url.pathname === '/api/indexar') {
     const project = assertProject(body.proyecto);
-    send(res, 200, await service.indexProject(project, (message) => console.error(message)));
+    try {
+      send(res, 200, body.solo_pendientes
+        ? { proyecto: project, documentos: await service.indexarPendientes(project, tracker(project)) }
+        : await service.indexProject(project, tracker(project)));
+    } finally {
+      progress.delete(project);
+    }
     return;
   }
 
   if (url.pathname === '/api/plantilla') {
     const project = assertProject(body.proyecto);
-    send(res, 201, await service.generarPlantilla(
-      project,
-      body.nombre,
-      (message) => console.error(message)
-    ));
+    try {
+      send(res, 201, await service.generarPlantilla(project, body.nombre, tracker(project), {
+        inicio: body.inicio,
+        equipo: body.equipo,
+      }));
+    } finally {
+      progress.delete(project);
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/exportar') {
+    const project = assertProject(body.plantilla && body.plantilla.proyecto);
+    try {
+      send(res, 201, await integraciones.exportar(body, tracker(project)));
+    } finally {
+      progress.delete(project);
+    }
     return;
   }
 
@@ -137,7 +190,7 @@ function start() {
   server.listen(config.port, '127.0.0.1', () => {
     console.log(`Motor Scrum en http://127.0.0.1:${config.port}`);
     console.log(`Modelo: ${config.chatModel}`);
-    console.log(`Base: ${config.dbPath}`);
+    console.log(`Base: ${describeDatabase()}`);
   });
   return server;
 }

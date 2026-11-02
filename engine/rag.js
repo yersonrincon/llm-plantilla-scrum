@@ -1,47 +1,43 @@
-const { config } = require('./config');
-const { getDb, documentQueries, embeddingQueries, deleteProject } = require('./db');
+const { config, DOCUMENT_TYPES } = require('./config');
+const { documentQueries, embeddingQueries, deleteProject } = require('./db');
 const { embedText, assertModels } = require('./ollama');
 
 function chunkText(text, chunkSize = config.chunkSize, overlap = config.chunkOverlap) {
   if (chunkSize <= overlap) {
     throw new Error('RAG_CHUNK_SIZE debe ser mayor que RAG_CHUNK_OVERLAP');
   }
-  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const paragraphs = String(text || '')
+    .split(/\n+/)
+    .map((paragraph) => paragraph.split(/\s+/).filter(Boolean))
+    .filter((words) => words.length);
   const chunks = [];
-  const step = chunkSize - overlap;
-  for (let index = 0; index < words.length; index += step) {
-    const chunk = words.slice(index, index + chunkSize).join(' ').trim();
-    if (chunk) chunks.push(chunk);
-    if (index + chunkSize >= words.length) break;
+  let current = [];
+  let fresh = 0;
+  function flush() {
+    if (!fresh) return;
+    chunks.push(current.join(' '));
+    current = overlap ? current.slice(-overlap) : [];
+    fresh = 0;
   }
+  for (const words of paragraphs) {
+    if (fresh && current.length + words.length > chunkSize && words.length <= chunkSize - overlap) flush();
+    for (const word of words) {
+      current.push(word);
+      fresh += 1;
+      if (current.length >= chunkSize) flush();
+    }
+  }
+  flush();
   return chunks;
 }
 
-function cosineSimilarity(left, right) {
-  if (!left || !right || left.length !== right.length || left.length === 0) return 0;
-  let dot = 0;
-  let leftNorm = 0;
-  let rightNorm = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    dot += left[index] * right[index];
-    leftNorm += left[index] * left[index];
-    rightNorm += right[index] * right[index];
-  }
-  if (leftNorm === 0 || rightNorm === 0) return 0;
-  return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+function isUsefulChunk(chunk) {
+  const visible = chunk.replace(/\s/g, '');
+  const letters = (chunk.match(/\p{L}/gu) || []).length;
+  return chunk.split(/\s+/).length >= 5 && letters / Math.max(visible.length, 1) >= 0.4;
 }
 
-function selectContext(rows, queryVector, budgetChars) {
-  const scored = rows.map((row) => ({
-    id: row.id,
-    document_id: row.document_id,
-    title: row.title,
-    type: row.type,
-    chunk_index: row.chunk_index,
-    chunk_text: row.chunk_text,
-    similarity: cosineSimilarity(queryVector, row.vector),
-  }));
-
+function selectContext(scored, budgetChars) {
   const byDocument = new Map();
   for (const row of scored) {
     const list = byDocument.get(row.document_id);
@@ -58,16 +54,18 @@ function selectContext(rows, queryVector, budgetChars) {
 
   const picked = [];
   const seen = new Set();
+  const seenText = new Set();
   let used = 0;
   const share = Math.max(500, Math.floor(budgetChars / Math.max(byDocument.size, 1)));
 
   function addPiece(row, limit) {
-    if (seen.has(row.id)) return;
+    if (seen.has(row.id) || seenText.has(row.chunk_text)) return;
     const room = Math.min(limit, budgetChars - used);
     if (room < 80) return;
     const piece = row.chunk_text.length > room ? row.chunk_text.slice(0, room) : row.chunk_text;
     picked.push({ ...row, chunk_text: piece });
     seen.add(row.id);
+    seenText.add(row.chunk_text);
     used += piece.length;
   }
 
@@ -84,7 +82,9 @@ function selectContext(rows, queryVector, budgetChars) {
 }
 
 async function indexDocument(document, onChunk) {
-  const chunks = chunkText(document.content);
+  const all = chunkText(document.content);
+  const useful = all.filter(isUsefulChunk);
+  const chunks = useful.length ? useful : all;
   if (!chunks.length) {
     const error = new Error(`El documento "${document.title}" no tiene texto`);
     error.status = 400;
@@ -95,19 +95,13 @@ async function indexDocument(document, onChunk) {
     if (onChunk) onChunk(index + 1, chunks.length);
     vectors.push(await embedText(chunks[index]));
   }
-  const tx = getDb().transaction(() => {
-    embeddingQueries.deleteByDocument(document.id);
-    vectors.forEach((vector, index) => {
-      embeddingQueries.create(document.id, chunks[index], index, JSON.stringify(vector));
-    });
-  });
-  tx();
+  await embeddingQueries.replaceForDocument(document.id, chunks, vectors);
   return { id: document.id, title: document.title, fragmentos: chunks.length };
 }
 
 async function indexProject(project, onProgress) {
   await assertModels();
-  const documents = documentQueries.list(project);
+  const documents = await documentQueries.list(project);
   if (!documents.length) {
     const error = new Error(`No hay documentos del proyecto "${project}" en la base`);
     error.status = 400;
@@ -118,14 +112,43 @@ async function indexProject(project, onProgress) {
     const document = documents[index];
     if (onProgress) onProgress(`Indexando ${index + 1}/${documents.length}: ${document.title}`);
     indexed.push(await indexDocument(document, (current, total) => {
-      if (onProgress) onProgress(`  fragmento ${current}/${total}`);
+      if (onProgress) onProgress(`Indexando ${index + 1}/${documents.length}: ${document.title} · fragmento ${current}/${total}`);
     }));
   }
   return { proyecto: project, documentos: indexed };
 }
 
-async function retrieve(project, query, types) {
-  const rows = embeddingQueries.listFor(project, types);
+function selectRanked(rows, budgetChars) {
+  const picked = [];
+  const seenText = new Set();
+  let used = 0;
+  for (const row of rows) {
+    const room = budgetChars - used;
+    if (room < 80) break;
+    if (seenText.has(row.chunk_text)) continue;
+    seenText.add(row.chunk_text);
+    const piece = row.chunk_text.length > room ? row.chunk_text.slice(0, room) : row.chunk_text;
+    picked.push({ ...row, chunk_text: piece });
+    used += piece.length;
+  }
+  return picked;
+}
+
+async function retrieveKnowledge(queryVector, budgetChars) {
+  const rows = await embeddingQueries.search(
+    config.knowledgeProject,
+    DOCUMENT_TYPES,
+    queryVector,
+    config.embedModel,
+    config.knowledgeTopK
+  );
+  const relevant = rows.filter((row) => row.similarity >= config.knowledgeMinSimilarity);
+  return selectRanked(relevant, budgetChars).map((row) => ({ ...row, origen: 'base_conocimiento' }));
+}
+
+async function retrieve(project, query, types, { conBase = false } = {}) {
+  const queryVector = await embedText(query);
+  const rows = await embeddingQueries.search(project, types, queryVector);
   if (!rows.length) {
     const error = new Error(
       `No hay embeddings para "${project}". Ejecuta: node engine/cli.js indexar --proyecto "${project}"`
@@ -133,56 +156,53 @@ async function retrieve(project, query, types) {
     error.status = 400;
     throw error;
   }
-  const queryVector = await embedText(query);
-  const parsed = rows.map((row) => ({
-    id: row.id,
-    document_id: row.document_id,
-    title: row.title,
-    type: row.type,
-    chunk_index: row.chunk_index,
-    chunk_text: row.chunk_text,
-    vector: JSON.parse(row.embedding),
-  }));
-  return selectContext(parsed, queryVector, config.budgetChars);
+  const useKnowledge = conBase && project !== config.knowledgeProject;
+  const knowledgeBudget = useKnowledge ? Math.floor(config.budgetChars * config.knowledgeShare) : 0;
+  const knowledge = useKnowledge ? await retrieveKnowledge(queryVector, knowledgeBudget) : [];
+  const used = knowledge.reduce((total, row) => total + row.chunk_text.length, 0);
+  const own = selectContext(rows, config.budgetChars - used);
+  return {
+    picked: [...own.picked.map((row) => ({ ...row, origen: 'proyecto' })), ...knowledge],
+    omitted: own.omitted,
+  };
 }
 
 function formatContext(picked) {
   if (!picked.length) return 'No hay fragmentos recuperados.';
   return picked.map((row, index) => {
     const similarity = Number(row.similarity || 0).toFixed(3);
-    return `[${index + 1}] documento="${row.title}" tipo=${row.type} fragmento=${row.chunk_index} similitud=${similarity}\n${row.chunk_text}`;
+    const origin = row.origen || 'proyecto';
+    return `[${index + 1}] origen=${origin} documento="${row.title}" tipo=${row.type} fragmento=${row.chunk_index} similitud=${similarity}\n${row.chunk_text}`;
   }).join('\n\n');
 }
 
-function selfCheck() {
+async function selfCheck() {
   const chunks = chunkText('uno dos tres cuatro cinco', 2, 1);
   if (chunks.join(' | ') !== 'uno dos | dos tres | tres cuatro | cuatro cinco') {
     throw new Error(`chunkText inesperado: ${chunks.join(' | ')}`);
   }
 
   const project = '__verificar_rag__';
-  deleteProject(project);
+  const model = '__verificar__';
+  await deleteProject(project);
   try {
-    const loginId = documentQueries.create(
+    const loginId = await documentQueries.create(
       'Login verificar',
       'El usuario inicia sesión con email y contraseña.',
       'caso_uso',
       project
     );
-    const pagoId = documentQueries.create(
+    const pagoId = await documentQueries.create(
       'Pago verificar',
       'El cliente paga el pedido con tarjeta.',
       'caso_uso',
       project
     );
-    embeddingQueries.create(loginId, 'inicio de sesión email contraseña', 0, JSON.stringify([1, 0, 0]));
-    embeddingQueries.create(pagoId, 'pago con tarjeta del pedido', 0, JSON.stringify([0, 1, 0]));
+    await embeddingQueries.replaceForDocument(loginId, ['inicio de sesión email contraseña'], [[1, 0, 0]], model);
+    await embeddingQueries.replaceForDocument(pagoId, ['pago con tarjeta del pedido'], [[0, 1, 0]], model);
 
-    const rows = embeddingQueries.listFor(project, ['caso_uso']).map((row) => ({
-      ...row,
-      vector: JSON.parse(row.embedding),
-    }));
-    const selected = selectContext(rows, [1, 0, 0], 10000);
+    const rows = await embeddingQueries.search(project, ['caso_uso'], [1, 0, 0], model);
+    const selected = selectContext(rows, 10000);
     const titles = selected.picked.map((row) => row.title);
     if (titles[0] !== 'Login verificar' || !titles.includes('Pago verificar')) {
       throw new Error(`La búsqueda no cubrió la base: ${titles.join(', ')}`);
@@ -192,17 +212,17 @@ function selfCheck() {
     }
     return {
       ok: true,
+      motor: 'PostgreSQL (cosine_similarity)',
       fragmentos: titles,
       similitud_login: selected.picked[0].similarity,
     };
   } finally {
-    deleteProject(project);
+    await deleteProject(project);
   }
 }
 
 module.exports = {
   chunkText,
-  cosineSimilarity,
   selectContext,
   indexDocument,
   indexProject,

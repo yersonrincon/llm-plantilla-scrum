@@ -1,31 +1,21 @@
 const { config } = require('./config');
 
-function loadClient() {
-  const pkg = require('ollama');
-  const Ollama = pkg.Ollama || (pkg.default && pkg.default.Ollama) || pkg.default;
-  if (typeof Ollama !== 'function') {
-    throw new Error('La librería npm "ollama" no exportó el cliente. Reinstala las dependencias.');
-  }
-  return new Ollama({ host: config.ollamaHost });
-}
-
-let client;
-
-function getClient() {
-  if (!client) client = loadClient();
-  return client;
-}
-
 function fail(message, status) {
   const error = new Error(message);
   error.status = status;
   return error;
 }
 
-async function ollamaVersion() {
+async function request(pathname, body) {
   let response;
   try {
-    response = await fetch(`${config.ollamaHost}/api/version`);
+    response = await fetch(`${config.ollamaHost}${pathname}`, body === undefined
+      ? undefined
+      : {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
   } catch {
     throw fail(
       `Ollama no está corriendo en ${config.ollamaHost}. Ábrelo y descarga los modelos antes de indexar.`,
@@ -33,14 +23,19 @@ async function ollamaVersion() {
     );
   }
   if (!response.ok) {
-    throw fail(`Ollama respondió HTTP ${response.status}`, 503);
+    const detail = await response.text().catch(() => '');
+    throw fail(`Ollama respondió HTTP ${response.status} en ${pathname}${detail ? `: ${detail}` : ''}`,
+      response.status === 404 ? 404 : 502);
   }
   return response.json();
 }
 
+async function ollamaVersion() {
+  return request('/api/version');
+}
+
 async function installedModels() {
-  await ollamaVersion();
-  const listed = await getClient().list();
+  const listed = await request('/api/tags');
   return (listed.models || []).map((model) => model.name || model.model).filter(Boolean);
 }
 
@@ -69,30 +64,39 @@ function gpuOptions(extra = {}) {
   return {
     temperature: config.temperature,
     top_p: 0.9,
+    repeat_penalty: 1.1,
+    repeat_last_n: 256,
     num_ctx: config.numCtx,
     num_gpu: config.numGpu,
     ...extra,
   };
 }
 
+const RETRY_OPTIONS = [
+  {},
+  { temperature: 0.4, repeat_penalty: 1.25 },
+  { temperature: 0.7, repeat_penalty: 1.35, top_p: 0.95 },
+];
+
+function isRepetitionAbort(error) {
+  return /repeat limit|prediction aborted/i.test(String(error && error.message));
+}
+
 async function embedText(text) {
-  const ollama = getClient();
   const prompt = String(text || '').slice(0, 8000);
-  const request = {
+  const base = {
     model: config.embedModel,
     keep_alive: '2m',
     options: { num_gpu: config.numGpu },
   };
-  if (typeof ollama.embed === 'function') {
-    try {
-      const response = await ollama.embed({ ...request, input: prompt });
-      const vector = response.embeddings && response.embeddings[0];
-      if (Array.isArray(vector) && vector.length) return vector;
-    } catch (error) {
-      if (typeof ollama.embeddings !== 'function') throw error;
-    }
+  try {
+    const response = await request('/api/embed', { ...base, input: prompt });
+    const vector = response.embeddings && response.embeddings[0];
+    if (Array.isArray(vector) && vector.length) return vector;
+  } catch (error) {
+    if (error.status !== 404) throw error;
   }
-  const response = await ollama.embeddings({ ...request, prompt });
+  const response = await request('/api/embeddings', { ...base, prompt });
   if (!Array.isArray(response.embedding) || response.embedding.length === 0) {
     throw fail('Ollama devolvió un embedding vacío', 502);
   }
@@ -100,17 +104,18 @@ async function embedText(text) {
 }
 
 async function chat(messages, options = {}) {
-  const request = {
+  const body = {
     model: config.chatModel,
     messages,
     stream: false,
     keep_alive: '15m',
     options: gpuOptions({
       num_predict: options.numPredict || config.numPredict,
+      ...(options.sampling || {}),
     }),
   };
-  if (options.format) request.format = options.format;
-  const response = await getClient().chat(request);
+  if (options.format) body.format = options.format;
+  const response = await request('/api/chat', body);
   const content = response && response.message && response.message.content;
   if (!content || !String(content).trim()) {
     throw fail('Hermes no devolvió texto', 502);
@@ -136,8 +141,14 @@ async function chatJson(messages) {
   let predict = config.numPredict;
   let last = '';
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    last = await chat(messages, { format: 'json', numPredict: predict });
+  for (const sampling of RETRY_OPTIONS) {
+    try {
+      last = await chat(messages, { format: 'json', numPredict: predict, sampling });
+    } catch (error) {
+      if (!isRepetitionAbort(error)) throw error;
+      lastError = new Error('Hermes entró en un bucle repitiendo texto');
+      continue;
+    }
     try {
       return parseJson(last);
     } catch (error) {

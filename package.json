@@ -3,37 +3,21 @@
   "version": "1.0.0",
   "description": "Sistema LLM con Hermes + Ollama para generación de plantillas Scrum con RAG local",
   "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "dev": "next dev -p 43123",
-    "build": "next build",
-    "start": "next start -p 43123",
-    "lint": "eslint",
+    "start": "node engine/server.js",
+    "dev": "node --watch engine/server.js",
     "init-db": "node engine/cli.js init",
+    "migrar": "node engine/cli.js migrar-sqlite",
     "llm": "node engine/cli.js",
     "llm:serve": "node engine/server.js",
     "setup": "npm install && npm run init-db",
-    "check-ollama": "curl -s http://localhost:11434/api/version || echo 'Ollama no está corriendo. Ejecuta: ollama serve'"
+    "check-ollama": "node engine/cli.js salud"
   },
   "dependencies": {
-    "@langchain/community": "^1.1.29",
-    "@langchain/ollama": "^1.3.0",
-    "@types/better-sqlite3": "^9.6.0",
-    "better-sqlite3": "^13.0.3",
-    "langchain": "^1.6.0",
-    "natural": "^8.2.6",
-    "next": "16.4.3",
-    "ollama": "^0.6.4",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.4.3",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "pg": "^8.23.1",
+    "unpdf": "^2.1.0"
   }
 }

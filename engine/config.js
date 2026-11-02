@@ -41,7 +41,14 @@ const config = {
   ollamaHost: process.env.OLLAMA_HOST || 'http://127.0.0.1:11434',
   chatModel: process.env.OLLAMA_CHAT_MODEL || 'hermes3:3b-llama3.2-q4_K_M',
   embedModel: process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text',
-  dbPath: path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/scrum-llm.db'),
+  pg: {
+    host: process.env.PGHOST || '127.0.0.1',
+    port: Number(process.env.PGPORT || 5432),
+    user: process.env.PGUSER || 'postgres',
+    password: process.env.PGPASSWORD || '',
+    database: process.env.PGDATABASE || 'scrum_rag',
+  },
+  sqlitePath: path.resolve(process.cwd(), process.env.DATABASE_PATH || './data/scrum-llm.db'),
   chunkSize: Number(process.env.RAG_CHUNK_SIZE || 180),
   chunkOverlap: Number(process.env.RAG_CHUNK_OVERLAP || 30),
   numGpu: Number(process.env.OLLAMA_NUM_GPU || 999),
@@ -51,17 +58,38 @@ const config = {
   temperature: Number(process.env.OLLAMA_TEMPERATURE || 0.1),
   rxVram: profile.vram,
   port: Number(process.env.LLM_PORT || 43124),
+  knowledgeProject: (process.env.RAG_BASE_PROYECTO || 'base_conocimiento').trim(),
+  knowledgeShare: Number(process.env.RAG_BASE_PORCION || 0.35),
+  knowledgeTopK: Number(process.env.RAG_BASE_FRAGMENTOS || 12),
+  knowledgeMinSimilarity: Number(process.env.RAG_BASE_MIN_SIMILITUD || 0.4),
+  hoursPerDay: Number(process.env.HORAS_POR_DIA || 6),
+  sprintVelocity: Number(process.env.VELOCIDAD_SPRINT || 20),
+  sprintDays: Number(process.env.DIAS_SPRINT || 10),
+  trello: {
+    key: (process.env.TRELLO_API_KEY || '').trim(),
+    token: (process.env.TRELLO_TOKEN || '').trim(),
+  },
+  jira: {
+    site: (process.env.JIRA_SITIO || '').trim(),
+    email: (process.env.JIRA_EMAIL || '').trim(),
+    token: (process.env.JIRA_API_TOKEN || '').trim(),
+    project: (process.env.JIRA_PROYECTO || '').trim().toUpperCase(),
+  },
 };
 
 const DOCUMENT_TYPES = ['caso_uso', 'manual', 'guia', 'otro'];
 
 const FLUJO = [
-  'Guardar en SQLite los manuales y casos de uso del proyecto.',
-  'Indexar: Ollama calcula embeddings con nomic-embed-text y los guarda en la misma base.',
-  'Recuperar: cada fase ordena esos embeddings y arma el contexto solo con filas locales.',
-  'Analizar: Hermes 3 (Llama 3.2) redacta la plantilla Scrum por fases usando ese contexto.',
-  'Guardar la plantilla generada en SQLite.',
+  'Guardar en PostgreSQL los manuales y casos de uso del proyecto, y la documentación compartida en la base de conocimiento.',
+  'Indexar: Ollama calcula embeddings con nomic-embed-text y PostgreSQL los guarda como vectores.',
+  'Recuperar: PostgreSQL calcula la similitud coseno y arma el contexto con fragmentos del manual del usuario y de la base de conocimiento.',
+  'Analizar: Hermes 3 (Llama 3.2) redacta la plantilla Scrum por fases: los requisitos salen del manual y las buenas prácticas de la base de conocimiento.',
+  'Guardar la plantilla generada en PostgreSQL.',
 ];
+
+function describeDatabase() {
+  return `postgres://${config.pg.user}@${config.pg.host}:${config.pg.port}/${config.pg.database}`;
+}
 
 function assertProject(name) {
   const project = String(name || '').trim();
@@ -84,4 +112,5 @@ module.exports = {
   DOCUMENT_TYPES,
   FLUJO,
   assertProject,
+  describeDatabase,
 };
