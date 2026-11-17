@@ -1,5 +1,6 @@
 const { Client, Pool } = require('pg');
 const { config, DOCUMENT_TYPES, describeDatabase } = require('./config');
+const { splitPackets, wordCount } = require('./packets');
 
 let ready;
 
@@ -75,9 +76,19 @@ async function createSchema(pool) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS chunks (
+      id SERIAL PRIMARY KEY,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      packet_index INTEGER NOT NULL,
+      packet_text TEXT NOT NULL,
+      word_count INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (document_id, packet_index)
+    );
+
     CREATE TABLE IF NOT EXISTS embeddings (
       id SERIAL PRIMARY KEY,
       document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      chunk_id INTEGER REFERENCES chunks(id) ON DELETE CASCADE,
       chunk_text TEXT NOT NULL,
       chunk_index INTEGER NOT NULL,
       model TEXT NOT NULL,
@@ -95,9 +106,12 @@ async function createSchema(pool) {
 
     CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project);
     CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
+    CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
     CREATE INDEX IF NOT EXISTS idx_embeddings_document ON embeddings(document_id, model);
     CREATE INDEX IF NOT EXISTS idx_templates_project ON templates(project);
   `);
+  await pool.query('ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS chunk_id INTEGER REFERENCES chunks(id) ON DELETE CASCADE');
+  await backfillPackets(pool);
 }
 
 async function open() {
@@ -158,22 +172,81 @@ function assertKnownTypes(types) {
   }
 }
 
+async function insertPackets(client, documentId, packets) {
+  for (let index = 0; index < packets.length; index += 1) {
+    const text = packets[index];
+    await client.query(
+      `INSERT INTO chunks (document_id, packet_index, packet_text, word_count)
+       VALUES ($1, $2, $3, $4)`,
+      [documentId, index, text, wordCount(text)]
+    );
+  }
+}
+
+async function replacePackets(client, documentId, packets, { dropEmbeddings = true } = {}) {
+  if (dropEmbeddings) {
+    await client.query('DELETE FROM embeddings WHERE document_id = $1', [documentId]);
+  }
+  await client.query('DELETE FROM chunks WHERE document_id = $1', [documentId]);
+  await insertPackets(client, documentId, packets);
+}
+
+function packetsOf(content, packets) {
+  const parts = Array.isArray(packets) && packets.length ? packets : splitPackets(content);
+  if (parts.length) return parts;
+  const error = new Error('El documento no produjo paquetes de texto');
+  error.status = 400;
+  throw error;
+}
+
+async function backfillPackets(pool) {
+  const { rows } = await pool.query(`
+    SELECT d.id, d.content
+    FROM documents d
+    WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.document_id = d.id)
+    ORDER BY d.id
+  `);
+  for (const row of rows) {
+    const packets = splitPackets(row.content);
+    if (!packets.length) continue;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await replacePackets(client, row.id, packets, { dropEmbeddings: false });
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+}
+
 const INDEXED = `EXISTS (
   SELECT 1 FROM embeddings e WHERE e.document_id = d.id AND e.model = $1
 ) AS indexed`;
 
+const PACKETS = `(SELECT COUNT(*)::int FROM chunks c WHERE c.document_id = d.id) AS packets`;
+
 const documentQueries = {
-  async create(title, content, type, project) {
-    const { rows } = await query(
-      'INSERT INTO documents (title, content, type, project) VALUES ($1, $2, $3, $4) RETURNING id',
-      [title, content, type, project]
-    );
-    return rows[0].id;
+  async create(title, content, type, project, packets) {
+    const parts = packetsOf(content, packets);
+    return transaction(async (client) => {
+      const { rows } = await client.query(
+        'INSERT INTO documents (title, content, type, project) VALUES ($1, $2, $3, $4) RETURNING id',
+        [title, content, type, project]
+      );
+      const id = rows[0].id;
+      await replacePackets(client, id, parts);
+      return id;
+    });
   },
   async list(project) {
     if (project) {
       const { rows } = await query(`
-        SELECT d.id, d.title, d.content, d.type, d.project, d.created_at, d.updated_at, ${INDEXED}
+        SELECT d.id, d.title, d.content, d.type, d.project, d.created_at, d.updated_at,
+               ${INDEXED}, ${PACKETS}
         FROM documents d
         WHERE d.project = $2
         ORDER BY d.id
@@ -182,7 +255,7 @@ const documentQueries = {
     }
     const { rows } = await query(`
       SELECT d.id, d.title, d.type, d.project, d.created_at, d.updated_at,
-             length(d.content) AS content_length, ${INDEXED}
+             length(d.content) AS content_length, ${INDEXED}, ${PACKETS}
       FROM documents d
       ORDER BY d.created_at DESC, d.id DESC
     `, [config.embedModel]);
@@ -229,10 +302,29 @@ const documentQueries = {
     return rows;
   },
   async replaceContent(id, content) {
+    const parts = packetsOf(content);
     await transaction(async (client) => {
       await client.query('UPDATE documents SET content = $2, updated_at = now() WHERE id = $1', [id, content]);
-      await client.query('DELETE FROM embeddings WHERE document_id = $1', [id]);
+      await replacePackets(client, id, parts);
     });
+    return parts.length;
+  },
+};
+
+const chunkQueries = {
+  async listByDocument(documentId) {
+    const { rows } = await query(
+      'SELECT id, packet_index, packet_text, word_count FROM chunks WHERE document_id = $1 ORDER BY packet_index',
+      [documentId]
+    );
+    return rows;
+  },
+  async replaceForDocument(documentId, packets) {
+    const parts = packetsOf('', packets);
+    await transaction(async (client) => {
+      await replacePackets(client, documentId, parts);
+    });
+    return parts.length;
   },
 };
 
@@ -240,7 +332,7 @@ async function storageSize() {
   const { rows } = await query(`
     SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint AS bytes
     FROM pg_class c
-    WHERE c.relname IN ('documents', 'embeddings', 'templates') AND c.relkind = 'r'
+    WHERE c.relname IN ('documents', 'chunks', 'embeddings', 'templates') AND c.relkind = 'r'
   `);
   return Number(rows[0].bytes);
 }
@@ -271,7 +363,7 @@ async function cleanStorage() {
     };
   });
   const pool = await getPool();
-  await pool.query('VACUUM (FULL, ANALYZE) documents, embeddings, templates');
+  await pool.query('VACUUM (FULL, ANALYZE) documents, chunks, embeddings, templates');
   return removed;
 }
 
@@ -279,11 +371,16 @@ const embeddingQueries = {
   async replaceForDocument(documentId, chunks, vectors, model = config.embedModel) {
     await transaction(async (client) => {
       await client.query('DELETE FROM embeddings WHERE document_id = $1', [documentId]);
+      const stored = await client.query(
+        'SELECT id, packet_index FROM chunks WHERE document_id = $1 ORDER BY packet_index',
+        [documentId]
+      );
+      const chunkIds = new Map(stored.rows.map((row) => [row.packet_index, row.id]));
       for (let index = 0; index < chunks.length; index += 1) {
         await client.query(`
-          INSERT INTO embeddings (document_id, chunk_text, chunk_index, model, embedding)
-          VALUES ($1, $2, $3, $4, $5::real[])
-        `, [documentId, chunks[index], index, model, vectors[index].map(Number)]);
+          INSERT INTO embeddings (document_id, chunk_id, chunk_text, chunk_index, model, embedding)
+          VALUES ($1, $2, $3, $4, $5, $6::real[])
+        `, [documentId, chunkIds.get(index) || null, chunks[index], index, model, vectors[index].map(Number)]);
       }
     });
   },
@@ -314,6 +411,8 @@ const embeddingQueries = {
              COUNT(*) FILTER (WHERE EXISTS (
                SELECT 1 FROM embeddings e WHERE e.document_id = d.id AND e.model = $2
              ))::int AS indexados,
+             (SELECT COUNT(*)::int FROM chunks c JOIN documents x ON x.id = c.document_id
+              WHERE x.project = $1) AS paquetes,
              (SELECT COUNT(*)::int FROM embeddings e JOIN documents x ON x.id = e.document_id
               WHERE x.project = $1 AND e.model = $2) AS fragmentos
       FROM documents d
@@ -359,6 +458,7 @@ async function deleteProject(project) {
 async function counts() {
   const { rows } = await query(`
     SELECT (SELECT COUNT(*)::int FROM documents) AS documents,
+           (SELECT COUNT(*)::int FROM chunks) AS chunks,
            (SELECT COUNT(*)::int FROM embeddings) AS embeddings,
            (SELECT COUNT(*)::int FROM templates) AS templates
   `);
@@ -377,6 +477,7 @@ module.exports = {
   query,
   transaction,
   documentQueries,
+  chunkQueries,
   embeddingQueries,
   templateQueries,
   deleteProject,

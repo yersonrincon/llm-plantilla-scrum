@@ -156,7 +156,7 @@ Los archivos no se guardan tal cual. Antes de guardar, el texto pasa por una dep
 | Líneas cortadas a mitad de frase y palabras partidas con guion | "desa-\nrrollo" → "desarrollo" |
 | Caracteres raros de los PDF | ligaduras (ﬁ), espacios invisibles, viñetas convertidas en letras |
 
-En PostgreSQL solo se guarda el **texto limpio**, no el PDF. Al indexar, los fragmentos respetan los párrafos y se descartan los que no tienen texto útil, así Ollama calcula menos embeddings y Hermes recibe un contexto más limpio. En el chat, cada archivo adjunto muestra con 🧹 lo que se depuró.
+En PostgreSQL no se guarda el PDF: el texto limpio queda en `documents` y, al mismo tiempo, se parte en **paquetes** (chunks) en la tabla `chunks`. Cada sección o párrafo es un paquete; si uno se pasa de `RAG_CHUNK_SIZE` palabras se divide. Al indexar, Ollama calcula un embedding por paquete ya guardado (no vuelve a trocear el documento). En el chat, cada archivo adjunto muestra con 🧹 lo que se depuró.
 
 Mantenimiento de lo que ya está guardado:
 
@@ -213,10 +213,11 @@ Las dos APIs son gratuitas. Escribe los datos en la barra lateral, sección **Tr
 1. Entra a <https://trello.com/power-ups/admin>, crea un Power-Up (cualquier nombre y workspace) y abre la pestaña **API key**. Copia la key.
 2. Pégala en el panel; aparece el enlace **Generar el token de Trello**. Acepta el permiso y copia el token.
 3. Pulsa **📤 Crear en Trello**. Se crea un tablero nuevo con:
-   - Listas *Product backlog → Por hacer → En progreso → En revisión → Hecho*.
-   - Una tarjeta por historia, con descripción, criterios de aceptación, etiqueta de prioridad (roja, amarilla o verde), etiqueta de sprint y fechas de inicio y fin del sprint.
-   - Un checklist por tarjeta con las tareas, su responsable y sus horas.
-   - Las historias del primer sprint en *Por hacer*; las demás en *Product backlog*.
+   - Lista **📌 Proyecto**: visión, actores, equipo, plan de sprints, definition of done/ready y riesgos.
+   - Una **lista por sprint** (con fechas) y **📋 Product backlog** para lo que no esté asignado.
+   - Columnas **🔄 En progreso → 👀 En revisión → ✅ Hecho** para mover el trabajo.
+   - Cada historia es una tarjeta con portada según prioridad, etiquetas (prioridad, sprint, rol), fechas, criterios de aceptación y un checklist de tareas con responsable y horas.
+   - Si el nombre de la persona coincide con un miembro del tablero de Trello, la tarjeta se le asigna.
 
 **Jira Cloud** (plan Free, hasta 10 usuarios):
 
@@ -257,12 +258,13 @@ JIRA_PROYECTO=SCRUM
 │   Ollama Server     │         │  PostgreSQL scrum_rag │
 │  ┌───────────────┐  │         │  ┌─────────────────┐  │
 │  │   Hermes 3    │  │         │  │ documents       │  │
-│  │  (LLM Chat)   │  │         │  │ embeddings      │  │
-│  └───────────────┘  │         │  │   (REAL[])      │  │
-│  ┌───────────────┐  │         │  │ templates       │  │
-│  │ nomic-embed   │  │         │  │   (JSONB)       │  │
-│  │  (Embeddings) │  │         │  │ cosine_similarity│ │
-│  └───────────────┘  │         │  └─────────────────┘  │
+│  │  (LLM Chat)   │  │         │  │ chunks          │  │
+│  └───────────────┘  │         │  │ embeddings      │  │
+│  ┌───────────────┐  │         │  │   (REAL[])      │  │
+│  │ nomic-embed   │  │         │  │ templates       │  │
+│  │  (Embeddings) │  │         │  │   (JSONB)       │  │
+│  └───────────────┘  │         │  │ cosine_similarity│ │
+│                     │         │  └─────────────────┘  │
 └─────────────────────┘         └───────────────────────┘
 ```
 
@@ -280,7 +282,8 @@ JIRA_PROYECTO=SCRUM
 │   ├── ollama.js                # Cliente REST de Ollama con fetch
 │   ├── extract.js               # Texto de PDF, DOCX, TXT y MD
 │   ├── clean.js                 # Depuración del texto antes de guardarlo
-│   ├── rag.js                   # Chunks, embeddings y búsqueda
+│   ├── packets.js               # Separa el texto en paquetes al guardar
+│   ├── rag.js                   # Embeddings y búsqueda sobre paquetes guardados
 │   ├── workflow.js              # Generación de plantillas por fases
 │   ├── board.js                 # Tablero: tareas, responsables, horas, fechas y carga por persona
 │   ├── integraciones.js         # Exportar el tablero a Trello y Jira Cloud por su API
@@ -345,6 +348,7 @@ Ya dentro de psql (indicador `scrum_rag=#`):
 \dt                                               -- lista las tablas (barra invertida \, no /)
 \d documents                                      -- columnas de una tabla
 SELECT id, project, title FROM documents;         -- las consultas SQL terminan en ;
+SELECT document_id, packet_index, word_count FROM chunks ORDER BY document_id, packet_index;
 SELECT document_id, COUNT(*) FROM embeddings GROUP BY document_id;
 SELECT id, project, name, created_at FROM templates;
 \q                                                -- salir
@@ -354,8 +358,9 @@ Si el indicador cambia a `scrum_rag-#`, hay una consulta sin terminar: escribe `
 
 | Tabla | Contenido |
 |---|---|
-| `documents` | Manuales y casos de uso cargados (texto completo) |
-| `embeddings` | Fragmentos (chunks) de cada documento con su vector `REAL[]` |
+| `documents` | Metadatos y texto limpio completo (para listar y detectar duplicados) |
+| `chunks` | Paquetes de texto: una fila por sección/párrafo (`packet_text`) |
+| `embeddings` | Vector `REAL[]` de cada paquete (se calcula al indexar) |
 | `templates` | Plantillas Scrum generadas (JSONB) |
 
 ### Optimización para AMD RX

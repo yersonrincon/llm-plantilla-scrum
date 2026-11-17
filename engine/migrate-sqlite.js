@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { config } = require('./config');
 const { transaction } = require('./db');
+const { splitPackets, wordCount } = require('./packets');
 
 function utc(value) {
   return value ? `${value}+00` : null;
@@ -41,6 +42,14 @@ async function migrateFromSqlite(file) {
         RETURNING id
       `, [document.title, document.content, document.type, project, utc(document.created_at), utc(document.updated_at)]);
       ids.set(document.id, rows[0].id);
+      const packets = splitPackets(document.content);
+      for (let index = 0; index < packets.length; index += 1) {
+        await client.query(
+          `INSERT INTO chunks (document_id, packet_index, packet_text, word_count)
+           VALUES ($1, $2, $3, $4)`,
+          [rows[0].id, index, packets[index], wordCount(packets[index])]
+        );
+      }
       summary.documentos += 1;
     }
 

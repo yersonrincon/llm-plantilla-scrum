@@ -210,27 +210,23 @@ Devuelve JSON:
     types: ['caso_uso', 'manual', 'guia'],
     conBase: true,
     query: 'dependencias prioridad sprint duración planificación incremento',
-    instructions: `Organiza el trabajo de desarrollo en este orden fijo de fases: inicio, sprint_0, construccion, integracion, release.
+    instructions: `Organiza el trabajo en este orden fijo de fases y no te saltes ninguna: sprint_0, construccion, integracion, release.
+Devuelve un objeto de plan por cada una de esas 4 fases, aunque alguna fase tenga el array historias vacío.
+- sprint_0: preparación (entorno, datos de prueba, historias Ready). Como máximo 1 sprint.
+- construccion: aquí va el grueso. Parte en varios sprints si hay más de una historia de construcción; no pongas todo en un único sprint.
+- integracion: pruebas de punta a punta, corrección y ensamblado.
+- release: cierre, despliegue y entrega.
 Usa únicamente ids de historias que ya existen en el product backlog anterior.
-Si un fragmento (del proyecto o de la base de conocimiento) indica la duración del sprint, copia ese número y pon origen_duracion con el título del documento. El proyecto manda sobre la base de conocimiento.
+Repartelas según fase_proyecto de cada historia. No dejes historias fuera del plan.
+Si un fragmento indica la duración del sprint, copia ese número y pon origen_duracion con el título del documento. El proyecto manda sobre la base de conocimiento.
 Si ningún fragmento la indica, usa duracion_dias 10 y origen_duracion "practica_scrum".
-No dejes historias del backlog fuera del plan.
 Devuelve JSON:
 {
   "plan": [
-    {
-      "fase": "construccion",
-      "objetivo": "",
-      "sprints": [
-        {
-          "sprint_numero": 1,
-          "objetivo": "",
-          "historias": ["US-001"],
-          "duracion_dias": 10,
-          "origen_duracion": ""
-        }
-      ]
-    }
+    { "fase": "sprint_0", "objetivo": "Preparar el entorno", "sprints": [{ "sprint_numero": 1, "objetivo": "", "historias": ["US-001"], "duracion_dias": 10, "origen_duracion": "" }] },
+    { "fase": "construccion", "objetivo": "Construir el incremento", "sprints": [{ "sprint_numero": 2, "objetivo": "", "historias": ["US-002"], "duracion_dias": 10, "origen_duracion": "" }] },
+    { "fase": "integracion", "objetivo": "Integrar y probar", "sprints": [{ "sprint_numero": 3, "objetivo": "", "historias": ["US-003"], "duracion_dias": 10, "origen_duracion": "" }] },
+    { "fase": "release", "objetivo": "Entregar el incremento", "sprints": [{ "sprint_numero": 4, "objetivo": "", "historias": [], "duracion_dias": 10, "origen_duracion": "" }] }
   ]
 }`,
   },
@@ -320,6 +316,37 @@ async function generarTareas(backlog, onProgress) {
   return tasksByStory;
 }
 
+function applyPeople(payload, opciones = {}) {
+  const actoresNombres = Array.isArray(opciones.actores) ? opciones.actores : [];
+  const inicio = payload.fases && payload.fases.inicio && payload.fases.inicio.analisis;
+  if (inicio && Array.isArray(inicio.actores) && actoresNombres.length) {
+    inicio.actores = inicio.actores.map((actor) => {
+      const key = String(actor && actor.nombre || '').trim().toLowerCase();
+      const found = actoresNombres.find((row) => String(row.actor || '').trim().toLowerCase() === key);
+      if (!found) return actor;
+      return {
+        ...actor,
+        persona: found.nombre,
+        nombre: `${actor.nombre} (${found.nombre})`,
+      };
+    });
+  }
+
+  const calidad = payload.fases && payload.fases.calidad && payload.fases.calidad.analisis;
+  if (!calidad) return;
+  calidad.roles = calidad.roles && typeof calidad.roles === 'object' ? calidad.roles : {};
+  const equipo = opciones.equipo || {};
+  if (equipo.product_owner) calidad.roles.product_owner = equipo.product_owner;
+  if (equipo.scrum_master) calidad.roles.scrum_master = equipo.scrum_master;
+  const miembros = [
+    ...Object.entries(equipo)
+      .filter(([rol]) => rol !== 'product_owner' && rol !== 'scrum_master')
+      .map(([rol, nombre]) => `${ROLES[rol]}: ${nombre}`),
+    ...(Array.isArray(opciones.extras) ? opciones.extras : []).map((row) => `${ROLES[row.rol] || row.rol}: ${row.nombre}`),
+  ];
+  if (miembros.length) calidad.roles.equipo = miembros.join('; ');
+}
+
 async function generarPlantilla(project, name, onProgress, opciones = {}) {
   const documents = await requireDocuments(project);
   await assertModels();
@@ -380,6 +407,7 @@ async function generarPlantilla(project, name, onProgress, opciones = {}) {
     tablero,
     fases,
   };
+  applyPeople(payload, opciones);
 
   const templateName = name && String(name).trim()
     ? String(name).trim()

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { config, DOCUMENT_TYPES, FLUJO, assertProject, describeDatabase } = require('./config');
 const { documentQueries, embeddingQueries, templateQueries, counts, storageSize, cleanStorage } = require('./db');
+const { splitPackets } = require('./packets');
 const { cleanText, describeCleaning } = require('./clean');
 const { ROLES } = require('./board');
 const { ollamaVersion, installedModels, assertModels } = require('./ollama');
@@ -54,13 +55,15 @@ async function agregarDocumento({ proyecto, titulo, tipo, contenido }) {
   if (existing) {
     throw httpError(`Ese documento ya está guardado en "${project}" como «${existing.title}»`, 409);
   }
-  const id = await documentQueries.create(title, content, type, project);
+  const packets = splitPackets(content);
+  const id = await documentQueries.create(title, content, type, project, packets);
   return {
     id,
     proyecto: project,
     titulo: title,
     tipo: type,
     caracteres: content.length,
+    paquetes: packets.length,
     siguiente: `node engine/cli.js indexar --proyecto "${project}"`,
   };
 }
@@ -74,13 +77,14 @@ async function depurarDocumentos(proyecto, onProgress) {
     if (onProgress) onProgress(`Depurando ${index + 1}/${documents.length}: ${document.title}`);
     const { text, stats } = cleanText(document.content, { joinLines: true });
     if (text === document.content || text.replace(/\s/g, '').length < 20) continue;
-    await documentQueries.replaceContent(document.id, text);
+    const paquetes = await documentQueries.replaceContent(document.id, text);
     cambiados.push({
       id: document.id,
       proyecto: document.project,
       titulo: document.title,
       antes: document.content.length,
       despues: text.length,
+      paquetes,
       resumen: describeCleaning(stats),
     });
   }
@@ -139,6 +143,7 @@ async function listarDocumentos(proyecto) {
     tipo: document.type,
     proyecto: document.project,
     caracteres: document.content ? document.content.length : document.content_length,
+    paquetes: document.packets || 0,
     indexado: document.indexed,
     creado: document.created_at,
   }));
@@ -208,13 +213,15 @@ async function cargarCarpeta({ carpeta, proyecto, tipo, indexar = true }, onProg
         omitidos.push(relative);
         continue;
       }
-      const id = await documentQueries.create(title, contenido, type, project);
+      const packets = splitPackets(contenido);
+      const id = await documentQueries.create(title, contenido, type, project, packets);
       known.add(title.toLowerCase());
       guardados.push({
         id,
         titulo: title,
         archivo: relative,
         caracteres: contenido.length,
+        paquetes: packets.length,
         depuracion: depuracion.resumen,
       });
     } catch (error) {
@@ -289,7 +296,7 @@ async function indexarProyecto(proyecto, onProgress) {
   return indexProject(assertProject(proyecto), onProgress);
 }
 
-function opcionesTablero({ inicio, equipo } = {}) {
+function opcionesTablero({ inicio, equipo, extras, actores } = {}) {
   const fecha = String(inicio || '').trim();
   if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw httpError('La fecha de inicio debe tener el formato AAAA-MM-DD', 400);
   const nombres = {};
@@ -297,7 +304,17 @@ function opcionesTablero({ inicio, equipo } = {}) {
     const value = String(nombre || '').trim().slice(0, 60);
     if (ROLES[rol] && value) nombres[rol] = value;
   }
-  return { inicio: fecha, equipo: nombres };
+  const extraList = (Array.isArray(extras) ? extras : []).slice(0, 20).map((row) => {
+    const rol = row && ROLES[row.rol] ? row.rol : '';
+    const nombre = String(row && row.nombre || '').trim().slice(0, 60);
+    return rol && nombre ? { rol, nombre } : null;
+  }).filter(Boolean);
+  const actorList = (Array.isArray(actores) ? actores : []).slice(0, 20).map((row) => {
+    const actor = String(row && (row.actor || row.nombre_actor) || '').trim().slice(0, 80);
+    const nombre = String(row && row.nombre || '').trim().slice(0, 60);
+    return actor && nombre ? { actor, nombre } : null;
+  }).filter(Boolean);
+  return { inicio: fecha, equipo: nombres, extras: extraList, actores: actorList };
 }
 
 async function crearPlantilla(proyecto, nombre, onProgress, opciones) {

@@ -149,6 +149,8 @@ async function handle(req, res) {
       send(res, 201, await service.generarPlantilla(project, body.nombre, tracker(project), {
         inicio: body.inicio,
         equipo: body.equipo,
+        extras: body.extras,
+        actores: body.actores,
       }));
     } finally {
       progress.delete(project);

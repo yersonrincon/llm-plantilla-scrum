@@ -45,6 +45,7 @@ Comandos
   node engine/cli.js indexar --proyecto tienda
   node engine/cli.js plantilla --proyecto tienda --nombre "Scrum tienda" [--inicio 2026-11-09]
     [--equipo.desarrollador_backend "Ana" --equipo.qa "Luis" ...]
+    [--actor.Administrador "Paula" --actor.Trabajador "Cesar"]
     (roles: product_owner, scrum_master, analista, desarrollador_backend, desarrollador_frontend, qa, devops)
   node engine/cli.js consultar --proyecto tienda --pregunta "¿Qué valida el registro?"
   node engine/cli.js documentos --proyecto tienda
@@ -176,14 +177,16 @@ async function main() {
 
   if (command === 'plantilla') {
     const equipo = {};
+    const actores = [];
     for (const [key, value] of Object.entries(args)) {
       if (key.startsWith('equipo.')) equipo[key.slice(7)] = value;
+      if (key.startsWith('actor.')) actores.push({ actor: key.slice(6), nombre: value });
     }
     const result = await service.generarPlantilla(
       args.proyecto,
       args.nombre,
       (message) => console.error(message),
-      { inicio: args.inicio, equipo }
+      { inicio: args.inicio, equipo, actores }
     );
     console.log(JSON.stringify(result, null, 2));
     return;

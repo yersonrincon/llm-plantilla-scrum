@@ -12,6 +12,20 @@ const ROLES = {
 
 const TASK_TYPES = ['analisis', 'diseno', 'desarrollo', 'base_datos', 'pruebas', 'despliegue', 'documentacion'];
 const PHASE_ORDER = ['inicio', 'sprint_0', 'construccion', 'integracion', 'release'];
+const SPRINT_PHASES = ['sprint_0', 'construccion', 'integracion', 'release'];
+const PHASE_LABEL = {
+  inicio: 'inicio',
+  sprint_0: 'preparación',
+  construccion: 'construcción',
+  integracion: 'integración',
+  release: 'release',
+};
+const PHASE_GOAL = {
+  sprint_0: 'Preparar entorno, refinar el backlog y dejar las historias Ready',
+  construccion: 'Construir el incremento de producto',
+  integracion: 'Integrar, probar de punta a punta y corregir defectos',
+  release: 'Cerrar el release y dejar el incremento listo para entregar',
+};
 const PRIORITY_ORDER = { alta: 0, media: 1, baja: 2 };
 
 function normalizeRole(value) {
@@ -127,6 +141,21 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+function faseDeSprint(fase) {
+  if (fase === 'inicio') return 'sprint_0';
+  return SPRINT_PHASES.includes(fase) ? fase : 'construccion';
+}
+
+function emptySprint(fase, origen = 'fase') {
+  return {
+    fase,
+    objetivo: PHASE_GOAL[fase] || '',
+    dias: config.sprintDays,
+    historias: [],
+    origen,
+  };
+}
+
 function planSprints(plan, storyIds) {
   const steps = (Array.isArray(plan) ? plan : [])
     .filter((step) => step && typeof step === 'object')
@@ -134,16 +163,21 @@ function planSprints(plan, storyIds) {
   const used = new Set();
   const sprints = [];
   for (const step of steps) {
-    for (const sprint of Array.isArray(step.sprints) ? step.sprints : []) {
+    const fase = faseDeSprint(step.fase);
+    const packed = Array.isArray(step.sprints) ? step.sprints : [];
+    if (!packed.length) {
+      sprints.push(emptySprint(fase, 'plan'));
+      continue;
+    }
+    for (const sprint of packed) {
       if (!sprint || typeof sprint !== 'object') continue;
       const historias = (Array.isArray(sprint.historias) ? sprint.historias : [])
         .map(String)
         .filter((id) => storyIds.has(id) && !used.has(id));
       historias.forEach((id) => used.add(id));
-      if (!historias.length && step.fase !== 'sprint_0') continue;
       sprints.push({
-        fase: PHASE_ORDER.includes(step.fase) ? step.fase : 'construccion',
-        objetivo: cleanGoal(sprint.objetivo, step.objetivo),
+        fase,
+        objetivo: cleanGoal(sprint.objetivo, step.objetivo, PHASE_GOAL[fase]),
         dias: toBusinessDays(sprint.duracion_dias),
         historias,
         origen: 'plan',
@@ -151,6 +185,88 @@ function planSprints(plan, storyIds) {
     }
   }
   return { sprints, used };
+}
+
+function splitOverloaded(sprints, stories) {
+  const byId = new Map(stories.map((story) => [story.id, story]));
+  const pointsOf = (ids) => ids.reduce((total, id) => total + (byId.get(id) && byId.get(id).story_points || 0), 0);
+  const result = [];
+  for (const sprint of sprints) {
+    if (sprint.fase !== 'construccion' || sprint.historias.length <= 1) {
+      result.push(sprint);
+      continue;
+    }
+    let current = { ...sprint, historias: [] };
+    for (const id of sprint.historias) {
+      const next = pointsOf(current.historias) + (byId.get(id) && byId.get(id).story_points || 0);
+      if (current.historias.length && next > config.sprintVelocity) {
+        result.push(current);
+        current = { ...sprint, historias: [], origen: 'particion' };
+      }
+      current.historias.push(id);
+    }
+    if (current.historias.length) result.push(current);
+  }
+  return result;
+}
+
+function ensurePhaseSprints(sprints) {
+  const have = new Set(sprints.map((sprint) => sprint.fase));
+  for (const fase of SPRINT_PHASES) {
+    if (!have.has(fase)) sprints.push(emptySprint(fase));
+  }
+  sprints.sort((a, b) => PHASE_ORDER.indexOf(a.fase) - PHASE_ORDER.indexOf(b.fase));
+  return sprints;
+}
+
+function expandBoardSprints(tablero) {
+  if (!tablero || !Array.isArray(tablero.sprints)) return tablero;
+  const existing = tablero.sprints.map((sprint) => ({
+    ...sprint,
+    fase: sprint.fase || (tablero.sprints.length === 1 ? 'construccion' : sprint.fase),
+  }));
+  const have = new Set(existing.map((sprint) => sprint.fase).filter(Boolean));
+  if (existing.length && existing.every((sprint) => !sprint.fase)) {
+    existing.forEach((sprint) => {
+      sprint.fase = 'construccion';
+    });
+    have.add('construccion');
+  }
+  for (const fase of SPRINT_PHASES) {
+    if (have.has(fase)) continue;
+    existing.push({
+      fase,
+      objetivo: PHASE_GOAL[fase],
+      dias_habiles: config.sprintDays,
+      historias: [],
+      origen: 'fase',
+    });
+  }
+  existing.sort((a, b) => PHASE_ORDER.indexOf(a.fase || 'construccion') - PHASE_ORDER.indexOf(b.fase || 'construccion'));
+  let cursor = startDate(tablero.inicio_proyecto);
+  const oldToNew = new Map();
+  const sprints = existing.map((sprint, index) => {
+    const start = cursor;
+    const dias = sprint.dias_habiles || sprint.dias || config.sprintDays;
+    const end = addBusinessDays(start, dias);
+    cursor = nextBusinessDay(end);
+    const numero = index + 1;
+    if (sprint.numero != null) oldToNew.set(sprint.numero, numero);
+    return {
+      ...sprint,
+      numero,
+      nombre: `Sprint ${numero} · ${PHASE_LABEL[sprint.fase] || sprint.fase || 'construcción'}`,
+      inicio: isoDate(start),
+      fin: isoDate(end),
+      dias_habiles: dias,
+      historias: sprint.historias || [],
+    };
+  });
+  const historias = (tablero.historias || []).map((historia) => ({
+    ...historia,
+    sprint: oldToNew.has(historia.sprint) ? oldToNew.get(historia.sprint) : historia.sprint,
+  }));
+  return { ...tablero, sprints, historias };
 }
 
 function cleanGoal(...values) {
@@ -171,32 +287,55 @@ function sortByPriority(stories) {
 
 function assignLeftovers(sprints, stories, used) {
   const byId = new Map(stories.map((story) => [story.id, story]));
-  const points = (sprint) => sprint.historias.reduce((total, id) => total + (byId.get(id).story_points || 0), 0);
+  const points = (sprint) => sprint.historias.reduce((total, id) => total + ((byId.get(id) && byId.get(id).story_points) || 0), 0);
   const automaticos = [];
-  for (const story of sortByPriority(stories.filter((item) => !used.has(item.id)))) {
-    let target = sprints.find((sprint) => (
-      sprint.fase !== 'sprint_0' && points(sprint) + story.story_points <= config.sprintVelocity
-    ));
-    if (!target) {
-      target = { fase: 'construccion', objetivo: '', dias: config.sprintDays, historias: [], origen: 'automatico' };
+
+  function targetFor(story) {
+    const fase = faseDeSprint(story.fase_proyecto);
+    const room = (sprint) => fase !== 'construccion' || points(sprint) + story.story_points <= config.sprintVelocity;
+    let target = sprints.find((sprint) => sprint.fase === fase && room(sprint));
+    if (target) return target;
+    if (fase === 'construccion') {
+      target = emptySprint('construccion', 'automatico');
       sprints.push(target);
+      return target;
     }
-    target.historias.push(story.id);
+    target = sprints.find((sprint) => sprint.fase === fase);
+    if (target) return target;
+    target = emptySprint(fase, 'automatico');
+    sprints.push(target);
+    return target;
+  }
+
+  for (const story of sortByPriority(stories.filter((item) => !used.has(item.id)))) {
+    targetFor(story).historias.push(story.id);
     automaticos.push(story.id);
   }
   return automaticos;
 }
 
-function buildBoard(backlog, plan, tasksByStory, { inicio, equipo } = {}) {
+function namesForRole(rol, members, extras) {
+  const names = [];
+  if (members[rol]) names.push(members[rol]);
+  for (const extra of extras) {
+    if (extra.rol === rol && extra.nombre) names.push(extra.nombre);
+  }
+  return names;
+}
+
+function buildBoard(backlog, plan, tasksByStory, { inicio, equipo, extras } = {}) {
   const stories = (Array.isArray(backlog) ? backlog : []).map((story) => ({
     ...story,
     story_points: Number(story.story_points) || 3,
   }));
   const storyIds = new Set(stories.map((story) => story.id));
-  const { sprints, used } = planSprints(plan, storyIds);
-  const automaticos = assignLeftovers(sprints, stories, used);
+  const planned = planSprints(plan, storyIds);
+  const automaticos = assignLeftovers(planned.sprints, stories, planned.used);
+  const sprints = ensurePhaseSprints(splitOverloaded(planned.sprints, stories));
 
   const members = equipo && typeof equipo === 'object' ? equipo : {};
+  const extraMembers = Array.isArray(extras) ? extras : [];
+  const nextAssignee = {};
   const avisos = [];
   if (automaticos.length) {
     avisos.push(`Asigné automáticamente a sprints (por prioridad y una velocidad de ${config.sprintVelocity} puntos): ${automaticos.join(', ')}.`);
@@ -212,7 +351,7 @@ function buildBoard(backlog, plan, tasksByStory, { inicio, equipo } = {}) {
     sprint.historias.forEach((id) => sprintOf.set(id, numero));
     return {
       numero,
-      nombre: sprint.fase === 'sprint_0' ? `Sprint ${numero} (preparación)` : `Sprint ${numero}`,
+      nombre: `Sprint ${numero} · ${PHASE_LABEL[sprint.fase] || sprint.fase}`,
       fase: sprint.fase,
       objetivo: sprint.objetivo,
       inicio: isoDate(start),
@@ -238,32 +377,40 @@ function buildBoard(backlog, plan, tasksByStory, { inicio, equipo } = {}) {
       estado: 'Por hacer',
       origen_tareas: origen,
       horas: tareas.reduce((total, task) => total + task.horas, 0),
-      tareas: tareas.map((task) => ({
-        ...task,
-        sprint,
-        responsable: members[task.rol] || task.rol_nombre,
-        asignado: members[task.rol] || '',
-      })),
+      tareas: tareas.map((task) => {
+        const names = namesForRole(task.rol, members, extraMembers);
+        const index = nextAssignee[task.rol] || 0;
+        const persona = names.length ? names[index % names.length] : '';
+        if (names.length) nextAssignee[task.rol] = index + 1;
+        return {
+          ...task,
+          sprint,
+          responsable: persona || task.rol_nombre,
+          asignado: persona,
+        };
+      }),
     };
   });
 
   const carga = Object.keys(ROLES).map((rol) => {
+    const responsables = namesForRole(rol, members, extraMembers);
+    const etiqueta = responsables.length ? responsables.join(', ') : ROLES[rol];
     const porSprint = tablero.map((sprint) => {
       const horas = historias
         .filter((story) => story.sprint === sprint.numero)
         .flatMap((story) => story.tareas)
         .filter((task) => task.rol === rol)
         .reduce((total, task) => total + task.horas, 0);
-      const capacidad = sprint.dias_habiles * config.hoursPerDay;
+      const capacidad = sprint.dias_habiles * config.hoursPerDay * Math.max(responsables.length, 1);
       if (horas > capacidad) {
-        avisos.push(`${members[rol] || ROLES[rol]} tiene ${horas} h en el ${sprint.nombre} y su capacidad es ${capacidad} h.`);
+        avisos.push(`${etiqueta} tiene ${horas} h en el ${sprint.nombre} y su capacidad es ${capacidad} h.`);
       }
       return { sprint: sprint.numero, horas, capacidad };
     });
     return {
       rol,
       nombre: ROLES[rol],
-      responsable: members[rol] || ROLES[rol],
+      responsable: etiqueta,
       horas_total: porSprint.reduce((total, item) => total + item.horas, 0),
       por_sprint: porSprint,
     };
@@ -285,4 +432,4 @@ function buildBoard(backlog, plan, tasksByStory, { inicio, equipo } = {}) {
   };
 }
 
-module.exports = { ROLES, TASK_TYPES, normalizeTasks, buildBoard };
+module.exports = { ROLES, TASK_TYPES, normalizeTasks, buildBoard, expandBoardSprints };

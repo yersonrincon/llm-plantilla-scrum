@@ -80,9 +80,9 @@ const config = {
 const DOCUMENT_TYPES = ['caso_uso', 'manual', 'guia', 'otro'];
 
 const FLUJO = [
-  'Guardar en PostgreSQL los manuales y casos de uso del proyecto, y la documentación compartida en la base de conocimiento.',
-  'Indexar: Ollama calcula embeddings con nomic-embed-text y PostgreSQL los guarda como vectores.',
-  'Recuperar: PostgreSQL calcula la similitud coseno y arma el contexto con fragmentos del manual del usuario y de la base de conocimiento.',
+  'Guardar en PostgreSQL los manuales y casos de uso partidos en paquetes (chunks), y la documentación compartida en la base de conocimiento.',
+  'Indexar: Ollama calcula embeddings de cada paquete con nomic-embed-text y PostgreSQL los guarda como vectores.',
+  'Recuperar: PostgreSQL calcula la similitud coseno y arma el contexto con paquetes del manual del usuario y de la base de conocimiento.',
   'Analizar: Hermes 3 (Llama 3.2) redacta la plantilla Scrum por fases: los requisitos salen del manual y las buenas prácticas de la base de conocimiento.',
   'Guardar la plantilla generada en PostgreSQL.',
 ];

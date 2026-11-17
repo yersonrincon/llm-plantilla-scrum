@@ -1,4 +1,5 @@
 const { config } = require('./config');
+const { expandBoardSprints } = require('./board');
 
 const TRELLO_API = 'https://api.trello.com/1';
 const TRELLO_PAUSE_MS = 120;
@@ -113,7 +114,7 @@ async function peticion(servicio, url, { method = 'GET', headers = {}, body } = 
 
 function trelloCliente({ key, token }) {
   if (!key || !token) {
-    throw httpError('Faltan la API key y el token de Trello. Escríbelos en «Trello y Jira» o ponlos en .env (TRELLO_API_KEY, TRELLO_TOKEN).');
+    throw httpError('Faltan la API key y el token de Trello. Escríbelos en «Trello » o ponlos en .env (TRELLO_API_KEY, TRELLO_TOKEN).');
   }
   return async (method, ruta, body) => {
     const url = new URL(`${TRELLO_API}${ruta}`);
@@ -125,87 +126,330 @@ function trelloCliente({ key, token }) {
   };
 }
 
+function fechaCorta(iso) {
+  if (!iso) return '';
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+
+function linea(item) {
+  if (item == null) return '';
+  if (typeof item === 'string') return item.trim();
+  if (item.nombre && item.descripcion) return `${item.nombre}: ${item.descripcion}`;
+  return String(item.texto || item.nombre || item.motivo || '').trim();
+}
+
+function lineas(items) {
+  return (Array.isArray(items) ? items : []).map(linea).filter(Boolean);
+}
+
+function resumenPlantilla(plantilla) {
+  const inicio = (plantilla.resumen || (plantilla.fases && plantilla.fases.inicio && plantilla.fases.inicio.analisis) || {});
+  const calidad = (plantilla.resumen || (plantilla.fases && plantilla.fases.calidad && plantilla.fases.calidad.analisis) || {});
+  return {
+    vision: inicio.vision || '',
+    actores: lineas(inicio.actores),
+    objetivos: lineas(inicio.objetivos),
+    dentro: lineas(inicio.dentro_de_alcance),
+    fuera: lineas(inicio.fuera_de_alcance),
+    done: lineas(calidad.definition_of_done),
+    ready: lineas(calidad.definition_of_ready),
+    riesgos: lineas(calidad.riesgos),
+    ceremonias: calidad.ceremonias && typeof calidad.ceremonias === 'object' ? calidad.ceremonias : {},
+    roles: calidad.roles && typeof calidad.roles === 'object' ? calidad.roles : {},
+  };
+}
+
+function portadaPrioridad(nivel) {
+  if (nivel === 'alta') return 'red';
+  if (nivel === 'media') return 'orange';
+  if (nivel === 'baja') return 'lime';
+  return 'blue';
+}
+
 function descripcionTrello(historia, sprint, tablero) {
-  const criterios = (historia.criterios_aceptacion || []).filter(Boolean);
+  const criterios = lineas(historia.criterios_aceptacion);
+  const tareas = (historia.tareas || []).map((tarea) => (
+    `- ${tarea.titulo} — **${tarea.responsable || tarea.rol_nombre || tarea.rol}** · ${tarea.horas} h`
+  ));
+  const responsables = [...new Set((historia.tareas || []).map((tarea) => tarea.responsable || tarea.asignado).filter(Boolean))];
   return texto([
-    historia.historia || '',
+    historia.historia ? `## Historia\n${historia.historia}` : '',
     '',
-    `**Prioridad:** ${historia.prioridad || '-'} · **Story points:** ${historia.story_points ?? '-'} · **Horas estimadas:** ${historia.horas ?? 0} h`,
-    sprint ? `**${sprint.nombre}:** ${sprint.inicio} → ${sprint.fin}${sprint.objetivo ? ` — ${sprint.objetivo}` : ''}` : '**Sprint:** sin asignar (product backlog)',
-    ...(criterios.length ? ['', '**Criterios de aceptación**', ...criterios.map((item) => `- ${typeof item === 'string' ? item : item.texto || JSON.stringify(item)}`)] : []),
-    ...(historia.fuente_documento ? ['', `_Fuente: ${historia.fuente_documento}_`] : []),
-    '',
-    `_Columnas del flujo: ${(tablero.columnas || []).join(' → ')}_`,
-  ].join('\n'), 16000);
+    `**ID:** ${historia.id}  ·  **Prioridad:** ${historia.prioridad || '—'}  ·  **${historia.story_points ?? '—'} pts**  ·  **${historia.horas ?? 0} h**`,
+    sprint
+      ? `**${sprint.nombre}:** ${fechaCorta(sprint.inicio)} → ${fechaCorta(sprint.fin)}${sprint.objetivo ? `\n**Objetivo del sprint:** ${sprint.objetivo}` : ''}`
+      : '**Sprint:** sin asignar (product backlog)',
+    responsables.length ? `**Responsables:** ${responsables.join(', ')}` : '',
+    ...(criterios.length ? ['', '## Criterios de aceptación', ...criterios.map((item) => `- ${item}`)] : []),
+    ...(tareas.length ? ['', '## Tareas', ...tareas] : []),
+    historia.fuente_documento ? `\n_Fuente: ${historia.fuente_documento}_` : '',
+    tablero.columnas && tablero.columnas.length ? `\n_Flujo: ${tablero.columnas.join(' → ')}_` : '',
+  ].filter((line) => line !== '').join('\n'), 16000);
+}
+
+async function ponerPortada(trello, cardId, color) {
+  if (!color) return;
+  try {
+    await trello('PUT', `/cards/${cardId}`, { cover: { color, size: 'full' } });
+  } catch {
+    // Algunas cuentas gratuitas no aceptan portada; la tarjeta igual queda creada.
+  }
+}
+
+function idMiembro(miembros, nombre) {
+  const wanted = String(nombre || '').trim().toLowerCase();
+  if (!wanted) return null;
+  const exacto = miembros.find((member) => String(member.fullName || '').trim().toLowerCase() === wanted);
+  if (exacto) return exacto.id;
+  const parcial = miembros.filter((member) => {
+    const full = String(member.fullName || '').trim().toLowerCase();
+    return full && (full.includes(wanted) || wanted.includes(full));
+  });
+  return parcial.length === 1 ? parcial[0].id : null;
+}
+
+function espacioLleno(error) {
+  return /workspace/i.test((error && error.message) || '');
+}
+
+async function crearTableroTrello(trello, campos, { avisos, onProgress }) {
+  try {
+    return await trello('POST', '/boards/', campos);
+  } catch (error) {
+    if (!espacioLleno(error)) throw error;
+  }
+
+  onProgress('Trello: el espacio está lleno (máximo 10 tableros). Busco uno que ya exista…');
+  const orgs = await trello('GET', '/members/me/organizations?fields=id,displayName').catch(() => []);
+  for (const org of Array.isArray(orgs) ? orgs : []) {
+    const boards = await trello('GET', `/organizations/${org.id}/boards?filter=open&fields=id`).catch(() => null);
+    if (!Array.isArray(boards) || boards.length >= 10) continue;
+    avisos.push(`El espacio por defecto ya tiene 10 tableros. El tablero quedó en «${org.displayName || 'otro espacio'}», que ya existía.`);
+    return trello('POST', '/boards/', { ...campos, idOrganization: org.id });
+  }
+
+  throw httpError('Trello no deja crear más tableros: cada espacio gratuito admite 10. Cierra o elimina tableros viejos en trello.com y vuelve a intentarlo. No se creó un espacio nuevo.', 502);
 }
 
 async function exportarTrello(plantilla, recibidas, onProgress = () => {}) {
-  const tablero = validarPlantilla(plantilla);
+  const tablero = expandBoardSprints(validarPlantilla(plantilla));
   const trello = trelloCliente(credenciales('trello', recibidas));
-  const historias = tablero.historias;
-  const columnas = tablero.columnas && tablero.columnas.length ? tablero.columnas : ['Por hacer', 'En progreso', 'En revisión', 'Hecho'];
-  const sprintActual = (tablero.sprints || []).find((sprint) => historias.some((historia) => historia.sprint === sprint.numero));
+  const resumen = resumenPlantilla(plantilla);
+  const sprints = tablero.sprints || [];
+  const ordenPrioridad = { alta: 0, media: 1, baja: 2 };
+  const historias = [...tablero.historias].sort((a, b) => (
+    (ordenPrioridad[prioridad(a)] ?? 9) - (ordenPrioridad[prioridad(b)] ?? 9)
+    || String(a.id).localeCompare(String(b.id), 'es')
+  ));
+  const avisos = [];
 
-  onProgress('Trello: creando el tablero');
-  const board = await trello('POST', '/boards/', {
-    name: texto(`Scrum ${plantilla.proyecto || ''} · ${new Date().toLocaleDateString('es')}`, 120),
-    desc: texto(`Plantilla Scrum generada con ${plantilla.modelo || 'Hermes'}. ${tablero.inicio_proyecto} → ${tablero.fin_proyecto} · ${tablero.total_puntos} story points · ${tablero.total_horas} h.`, 16000),
+  onProgress('Trello: creando el tablero Scrum');
+  const board = await crearTableroTrello(trello, {
+    name: texto(`Scrum ${plantilla.proyecto || ''} · ${tablero.inicio_proyecto || new Date().toLocaleDateString('es')}`, 120),
+    desc: texto([
+      `Plantilla Scrum de **${plantilla.proyecto || 'proyecto'}**, generada con ${plantilla.modelo || 'Hermes'}.`,
+      '',
+      resumen.vision ? `**Visión:** ${resumen.vision}` : '',
+      `**Calendario:** ${fechaCorta(tablero.inicio_proyecto)} → ${fechaCorta(tablero.fin_proyecto)}`,
+      `**Alcance:** ${tablero.total_puntos ?? 0} story points · ${tablero.total_horas ?? 0} h · ${historias.length} historias · ${sprints.length} sprints`,
+      resumen.roles.product_owner ? `**Product Owner:** ${resumen.roles.product_owner}` : '',
+      resumen.roles.scrum_master ? `**Scrum Master:** ${resumen.roles.scrum_master}` : '',
+      resumen.roles.equipo ? `**Equipo:** ${resumen.roles.equipo}` : '',
+    ].filter(Boolean).join('\n'), 16000),
     defaultLists: false,
     defaultLabels: false,
-    prefs_background: 'green',
-  });
+    prefs_background: 'blue',
+    prefs_cardCovers: true,
+  }, { avisos, onProgress });
 
   const listas = {};
-  for (const nombre of ['Product backlog', ...columnas]) {
+  const nombresListas = [
+    '📌 Proyecto',
+    '📋 Product backlog',
+    ...sprints.map((sprint) => texto(
+      `${sprint.nombre} · ${fechaCorta(sprint.inicio)}–${fechaCorta(sprint.fin)}`,
+      80
+    )),
+    '🔄 En progreso',
+    '👀 En revisión',
+    '✅ Hecho',
+  ];
+  for (const nombre of nombresListas) {
     listas[nombre] = await trello('POST', '/lists', { name: nombre, idBoard: board.id, pos: 'bottom' });
   }
+  const listaSprint = (numero) => {
+    const sprint = sprints.find((item) => item.numero === numero);
+    if (!sprint) return listas['📋 Product backlog'];
+    return listas[texto(`${sprint.nombre} · ${fechaCorta(sprint.inicio)}–${fechaCorta(sprint.fin)}`, 80)];
+  };
 
-  onProgress('Trello: creando etiquetas de prioridad y sprint');
+  onProgress('Trello: etiquetas de prioridad, sprint y rol');
   const etiquetas = {};
   for (const [nivel, color] of Object.entries(PRIORIDAD_TRELLO)) {
-    etiquetas[`prioridad:${nivel}`] = await trello('POST', '/labels', { idBoard: board.id, name: `Prioridad ${nivel}`, color });
+    etiquetas[`prioridad:${nivel}`] = await trello('POST', '/labels', {
+      idBoard: board.id,
+      name: `Prioridad ${nivel}`,
+      color,
+    });
   }
-  for (const [index, sprint] of (tablero.sprints || []).entries()) {
+  for (const [index, sprint] of sprints.entries()) {
     etiquetas[`sprint:${sprint.numero}`] = await trello('POST', '/labels', {
       idBoard: board.id,
       name: texto(sprint.nombre, 60),
       color: SPRINT_COLORS[index % SPRINT_COLORS.length],
     });
   }
+  const roles = [...new Set(historias.flatMap((historia) => (historia.tareas || []).map((tarea) => tarea.rol_nombre || tarea.rol).filter(Boolean)))];
+  const coloresRol = ['sky', 'purple', 'pink', 'black', 'lime', 'orange'];
+  for (const [index, rol] of roles.entries()) {
+    etiquetas[`rol:${rol}`] = await trello('POST', '/labels', {
+      idBoard: board.id,
+      name: texto(rol, 50),
+      color: coloresRol[index % coloresRol.length],
+    });
+  }
+
+  const miembros = await trello('GET', `/boards/${board.id}/members`).catch(() => []);
+
+  async function crearTarjeta(lista, { name, desc, labels = [], cover, start, due, members = [] }) {
+    const card = await trello('POST', '/cards', {
+      idList: lista.id,
+      name: texto(name, 250),
+      desc: texto(desc, 16000),
+      pos: 'bottom',
+      ...(labels.length ? { idLabels: labels.join(',') } : {}),
+      ...(members.length ? { idMembers: members.join(',') } : {}),
+      ...(start ? { start } : {}),
+      ...(due ? { due } : {}),
+    });
+    await ponerPortada(trello, card.id, cover);
+    return card;
+  }
+
+  async function checklist(cardId, nombre, items) {
+    const utiles = (items || []).map((item) => texto(item, 500)).filter(Boolean);
+    if (!utiles.length) return 0;
+    const listaCheck = await trello('POST', `/cards/${cardId}/checklists`, { name: nombre });
+    for (const item of utiles) {
+      await trello('POST', `/checklists/${listaCheck.id}/checkItems`, { name: item, pos: 'bottom' });
+    }
+    return utiles.length;
+  }
+
+  onProgress('Trello: tarjetas de visión, equipo y calidad');
+  const info = [
+    resumen.vision && {
+      name: '🎯 Visión del producto',
+      cover: 'blue',
+      desc: [`## Visión\n${resumen.vision}`, '', resumen.objetivos.length ? `## Objetivos\n${resumen.objetivos.map((item) => `- ${item}`).join('\n')}` : '', resumen.dentro.length ? `\n## Dentro del alcance\n${resumen.dentro.map((item) => `- ${item}`).join('\n')}` : '', resumen.fuera.length ? `\n## Fuera del alcance\n${resumen.fuera.map((item) => `- ${item}`).join('\n')}` : ''].filter(Boolean).join('\n'),
+    },
+    (resumen.actores.length || resumen.roles.equipo || resumen.roles.product_owner) && {
+      name: '👥 Actores y equipo',
+      cover: 'purple',
+      desc: [
+        resumen.actores.length ? `## Actores de negocio\n${resumen.actores.map((item) => `- ${item}`).join('\n')}` : '',
+        '',
+        '## Equipo Scrum',
+        resumen.roles.product_owner ? `- **Product Owner:** ${resumen.roles.product_owner}` : '',
+        resumen.roles.scrum_master ? `- **Scrum Master:** ${resumen.roles.scrum_master}` : '',
+        resumen.roles.equipo ? `- **Equipo:** ${resumen.roles.equipo}` : '',
+        '',
+        ...(tablero.carga || []).map((fila) => `- ${fila.responsable || fila.nombre}: ${fila.horas_total} h`),
+      ].filter(Boolean).join('\n'),
+    },
+    sprints.length && {
+      name: `📅 Plan · ${sprints.length} sprints · ${tablero.total_puntos ?? 0} pts`,
+      cover: 'sky',
+      desc: [
+        `**${fechaCorta(tablero.inicio_proyecto)} → ${fechaCorta(tablero.fin_proyecto)}**`,
+        `**${historias.length} historias · ${tablero.total_horas ?? 0} h**`,
+        '',
+        ...sprints.map((sprint) => {
+          const pts = historias.filter((historia) => historia.sprint === sprint.numero)
+            .reduce((total, historia) => total + (Number(historia.story_points) || 0), 0);
+          return `- **${sprint.nombre}** (${fechaCorta(sprint.inicio)} → ${fechaCorta(sprint.fin)}, ${pts} pts)${sprint.objetivo ? `: ${sprint.objetivo}` : ''}`;
+        }),
+      ].join('\n'),
+    },
+    (resumen.done.length || resumen.ready.length) && {
+      name: '✅ Definition of Done / Ready',
+      cover: 'lime',
+      desc: [
+        resumen.ready.length ? `## Ready\n${resumen.ready.map((item) => `- ${item}`).join('\n')}` : '',
+        resumen.done.length ? `\n## Done\n${resumen.done.map((item) => `- ${item}`).join('\n')}` : '',
+        Object.values(resumen.ceremonias).some(Boolean) ? `\n## Ceremonias\n${['sprint_planning', 'daily', 'review', 'retrospectiva'].filter((key) => resumen.ceremonias[key]).map((key) => `- **${key.replace(/_/g, ' ')}:** ${resumen.ceremonias[key]}`).join('\n')}` : '',
+      ].filter(Boolean).join('\n'),
+    },
+    resumen.riesgos.length && {
+      name: `⚠️ Riesgos (${resumen.riesgos.length})`,
+      cover: 'orange',
+      desc: `## Riesgos\n${resumen.riesgos.map((item) => `- ${item}`).join('\n')}`,
+    },
+  ].filter(Boolean);
+
+  for (const tarjeta of info) {
+    await crearTarjeta(listas['📌 Proyecto'], tarjeta);
+  }
+
+  onProgress('Trello: objetivos de cada sprint');
+  for (const sprint of sprints) {
+    const lista = listaSprint(sprint.numero);
+    const pts = historias.filter((historia) => historia.sprint === sprint.numero)
+      .reduce((total, historia) => total + (Number(historia.story_points) || 0), 0);
+    const ids = historias.filter((historia) => historia.sprint === sprint.numero).map((historia) => historia.id);
+    await crearTarjeta(lista, {
+      name: `🎯 Objetivo: ${texto(sprint.objetivo || sprint.nombre, 180)}`,
+      cover: SPRINT_COLORS[Math.max(0, sprints.indexOf(sprint)) % SPRINT_COLORS.length],
+      labels: [etiquetas[`sprint:${sprint.numero}`] && etiquetas[`sprint:${sprint.numero}`].id].filter(Boolean),
+      desc: [
+        `**${sprint.nombre}**`,
+        `**Fechas:** ${fechaCorta(sprint.inicio)} → ${fechaCorta(sprint.fin)} (${sprint.dias_habiles || ''} días hábiles)`,
+        `**Capacidad:** ${pts} story points · historias ${ids.join(', ') || 'ninguna'}`,
+        sprint.objetivo ? `\n## Objetivo\n${sprint.objetivo}` : '',
+      ].join('\n'),
+    });
+  }
 
   let tareas = 0;
   for (const [index, historia] of historias.entries()) {
-    onProgress(`Trello: tarjeta ${index + 1}/${historias.length} (${historia.id})`);
+    onProgress(`Trello: historia ${index + 1}/${historias.length} (${historia.id})`);
     const sprint = sprintDe(tablero, historia);
-    const enCurso = sprint && sprintActual && sprint.numero === sprintActual.numero;
-    const idLabels = [etiquetas[`prioridad:${prioridad(historia)}`], sprint && etiquetas[`sprint:${sprint.numero}`]]
-      .filter(Boolean).map((label) => label.id);
-    const card = await trello('POST', '/cards', {
-      idList: listas[enCurso ? columnas[0] : 'Product backlog'].id,
-      name: texto(`${historia.id} · ${historia.titulo} (${historia.story_points ?? '?'} pts)`, 250),
+    const lista = sprint ? listaSprint(sprint.numero) : listas['📋 Product backlog'];
+    const rolesHistoria = [...new Set((historia.tareas || []).map((tarea) => tarea.rol_nombre || tarea.rol).filter(Boolean))];
+    const labels = [
+      etiquetas[`prioridad:${prioridad(historia)}`],
+      sprint && etiquetas[`sprint:${sprint.numero}`],
+      ...rolesHistoria.map((rol) => etiquetas[`rol:${rol}`]),
+    ].filter(Boolean).map((label) => label.id);
+    const members = [...new Set((historia.tareas || []).map((tarea) => idMiembro(miembros, tarea.asignado || tarea.responsable)).filter(Boolean))];
+    const card = await crearTarjeta(lista, {
+      name: `${historia.id}  ·  ${historia.titulo}  ·  ${historia.story_points ?? '?'} pts`,
       desc: descripcionTrello(historia, sprint, tablero),
-      pos: 'bottom',
-      ...(idLabels.length ? { idLabels: idLabels.join(',') } : {}),
-      ...(sprint ? { start: fechaHora(sprint.inicio, '08:00:00'), due: fechaHora(sprint.fin, '18:00:00') } : {}),
+      labels,
+      cover: portadaPrioridad(prioridad(historia)),
+      members,
+      start: sprint ? fechaHora(sprint.inicio, '08:00:00') : undefined,
+      due: sprint ? fechaHora(sprint.fin, '18:00:00') : undefined,
     });
-    if (!(historia.tareas || []).length) continue;
-    const checklist = await trello('POST', `/cards/${card.id}/checklists`, { name: `Tareas (${historia.horas ?? 0} h)` });
-    for (const tarea of historia.tareas) {
-      await trello('POST', `/checklists/${checklist.id}/checkItems`, {
-        name: texto(`${tarea.titulo} — ${tarea.responsable || tarea.rol_nombre || tarea.rol} · ${tarea.horas} h`, 500),
-        pos: 'bottom',
-        ...(sprint ? { due: fechaHora(sprint.fin, '18:00:00') } : {}),
-      });
-      tareas += 1;
-    }
+    const criterios = lineas(historia.criterios_aceptacion);
+    await checklist(card.id, 'Criterios de aceptación', criterios);
+    const itemsTarea = (historia.tareas || []).map((tarea) => (
+      `${tarea.titulo} — ${tarea.responsable || tarea.rol_nombre || tarea.rol} · ${tarea.horas} h`
+    ));
+    tareas += await checklist(card.id, `Tareas · ${historia.horas ?? 0} h`, itemsTarea);
+  }
+
+  if (miembros.length <= 1) {
+    avisos.push('Invita al equipo al tablero de Trello para que las tarjetas se asignen solas cuando el nombre coincida.');
   }
 
   return {
     destino: 'trello',
     url: board.shortUrl || board.url,
     nombre: board.name,
-    creadas: { historias: historias.length, tareas, listas: Object.keys(listas).length },
-    avisos: [],
+    creadas: { historias: historias.length, tareas, listas: Object.keys(listas).length, sprints: sprints.length },
+    avisos,
   };
 }
 
@@ -327,7 +571,7 @@ async function crearIssue(jira, fields, opcionales, { avisos, omitidos }) {
 }
 
 async function exportarJira(plantilla, recibidas, onProgress = () => {}) {
-  const tablero = validarPlantilla(plantilla);
+  const tablero = expandBoardSprints(validarPlantilla(plantilla));
   const datos = credenciales('jira', recibidas);
   const jira = jiraCliente(datos);
   const clave = datos.proyecto;

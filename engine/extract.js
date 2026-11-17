@@ -111,7 +111,7 @@ async function extractText(fileName, buffer) {
   if (text.replace(/\s/g, '').length < 20) {
     throw fail(
       extension === '.pdf'
-        ? 'El PDF no tiene texto seleccionable (parece escaneado). Copia el texto y pégalo en el formulario.'
+        ? 'Este PDF es una imagen: no tiene texto que se pueda copiar. Suele pasar si está escaneado o si se guardó con Imprimir → PDF. Adjunta el archivo original (donde sí se selecciona el texto) o copia el contenido y pégalo aquí.'
         : 'El archivo no tiene texto suficiente para analizar.'
     );
   }

@@ -1,41 +1,7 @@
 const { config, DOCUMENT_TYPES } = require('./config');
-const { documentQueries, embeddingQueries, deleteProject } = require('./db');
+const { documentQueries, chunkQueries, embeddingQueries, deleteProject } = require('./db');
+const { chunkText, splitPackets } = require('./packets');
 const { embedText, assertModels } = require('./ollama');
-
-function chunkText(text, chunkSize = config.chunkSize, overlap = config.chunkOverlap) {
-  if (chunkSize <= overlap) {
-    throw new Error('RAG_CHUNK_SIZE debe ser mayor que RAG_CHUNK_OVERLAP');
-  }
-  const paragraphs = String(text || '')
-    .split(/\n+/)
-    .map((paragraph) => paragraph.split(/\s+/).filter(Boolean))
-    .filter((words) => words.length);
-  const chunks = [];
-  let current = [];
-  let fresh = 0;
-  function flush() {
-    if (!fresh) return;
-    chunks.push(current.join(' '));
-    current = overlap ? current.slice(-overlap) : [];
-    fresh = 0;
-  }
-  for (const words of paragraphs) {
-    if (fresh && current.length + words.length > chunkSize && words.length <= chunkSize - overlap) flush();
-    for (const word of words) {
-      current.push(word);
-      fresh += 1;
-      if (current.length >= chunkSize) flush();
-    }
-  }
-  flush();
-  return chunks;
-}
-
-function isUsefulChunk(chunk) {
-  const visible = chunk.replace(/\s/g, '');
-  const letters = (chunk.match(/\p{L}/gu) || []).length;
-  return chunk.split(/\s+/).length >= 5 && letters / Math.max(visible.length, 1) >= 0.4;
-}
 
 function selectContext(scored, budgetChars) {
   const byDocument = new Map();
@@ -81,22 +47,28 @@ function selectContext(scored, budgetChars) {
   return { picked, omitted };
 }
 
-async function indexDocument(document, onChunk) {
-  const all = chunkText(document.content);
-  const useful = all.filter(isUsefulChunk);
-  const chunks = useful.length ? useful : all;
-  if (!chunks.length) {
+async function packetsFor(document) {
+  const stored = await chunkQueries.listByDocument(document.id);
+  if (stored.length) return stored.map((row) => row.packet_text);
+  const packets = splitPackets(document.content);
+  if (!packets.length) {
     const error = new Error(`El documento "${document.title}" no tiene texto`);
     error.status = 400;
     throw error;
   }
+  await chunkQueries.replaceForDocument(document.id, packets);
+  return packets;
+}
+
+async function indexDocument(document, onChunk) {
+  const chunks = await packetsFor(document);
   const vectors = [];
   for (let index = 0; index < chunks.length; index += 1) {
     if (onChunk) onChunk(index + 1, chunks.length);
     vectors.push(await embedText(chunks[index]));
   }
   await embeddingQueries.replaceForDocument(document.id, chunks, vectors);
-  return { id: document.id, title: document.title, fragmentos: chunks.length };
+  return { id: document.id, title: document.title, fragmentos: chunks.length, paquetes: chunks.length };
 }
 
 async function indexProject(project, onProgress) {
@@ -186,6 +158,11 @@ async function selfCheck() {
   const model = '__verificar__';
   await deleteProject(project);
   try {
+    const sections = splitPackets('## Login\n\nEl usuario inicia sesión con email y contraseña.\n\n## Pago\n\nEl cliente paga el pedido con tarjeta.');
+    if (sections.length < 2) {
+      throw new Error(`splitPackets no separó secciones: ${sections.join(' | ')}`);
+    }
+
     const loginId = await documentQueries.create(
       'Login verificar',
       'El usuario inicia sesión con email y contraseña.',
@@ -198,6 +175,10 @@ async function selfCheck() {
       'caso_uso',
       project
     );
+    const loginPackets = await chunkQueries.listByDocument(loginId);
+    if (!loginPackets.length) {
+      throw new Error('El documento no se guardó en paquetes');
+    }
     await embeddingQueries.replaceForDocument(loginId, ['inicio de sesión email contraseña'], [[1, 0, 0]], model);
     await embeddingQueries.replaceForDocument(pagoId, ['pago con tarjeta del pedido'], [[0, 1, 0]], model);
 
@@ -212,8 +193,9 @@ async function selfCheck() {
     }
     return {
       ok: true,
-      motor: 'PostgreSQL (cosine_similarity)',
+      motor: 'PostgreSQL (cosine_similarity + paquetes)',
       fragmentos: titles,
+      paquetes_login: loginPackets.length,
       similitud_login: selected.picked[0].similarity,
     };
   } finally {

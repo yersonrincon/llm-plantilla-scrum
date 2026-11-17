@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Asistente Scrum</title>
+  <title>Taller Scrum</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23172033'/%3E%3Crect x='5' y='7' width='6' height='18' rx='2' fill='%23f4efe6'/%3E%3Crect x='13' y='7' width='6' height='13' rx='2' fill='%233dbe8b'/%3E%3Crect x='21' y='7' width='6' height='8' rx='2' fill='%23e7a15a'/%3E%3C/svg%3E">
   <style>
     :root {
       color-scheme: light;
-      --ink: #1d1b18;
-      --muted: #6b655b;
-      --line: #e6e0d6;
-      --paper: #f7f5f0;
+      --ink: #1c2430;
+      --muted: #5e6a78;
+      --line: #e3e8ee;
+      --paper: #eef2f6;
       --panel: #ffffff;
-      --side: #efebe3;
+      --side: #172033;
+      --side-ink: #f4f7fb;
+      --side-muted: #a9b6c9;
       --accent: #0f6e56;
-      --accent-soft: #e2f0eb;
+      --accent-soft: #e5f3ee;
       --accent-ink: #ffffff;
-      --user: #0f6e56;
+      --user: #172033;
       --warn: #8a4b08;
       --warn-soft: #fbf0e1;
       --danger: #8f2d2d;
+      --serif: Georgia, "Palatino Linotype", Palatino, serif;
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
@@ -40,30 +44,75 @@
     /* ---------- Barra lateral ---------- */
     aside {
       background: var(--side);
-      border-right: 1px solid var(--line);
-      padding: 18px 16px;
+      color: var(--side-ink);
+      border-right: 0;
+      padding: 20px 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 12px;
     }
-    .brand { display: flex; align-items: center; gap: 10px; }
-    .brand h1 { font-size: 1.1rem; margin: 0; }
-    .brand p { margin: 0; font-size: 0.8rem; color: var(--muted); }
+    aside > div {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    aside > .brand { background: transparent; border: 0; padding: 0; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 4px 4px 8px; }
+    .mark { flex: none; width: 42px; height: 42px; display: block; }
+    .logo { width: 100%; height: 100%; display: block; }
+    .brand h1 {
+      font-family: var(--serif);
+      font-size: 1.28rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0;
+      line-height: 1.05;
+    }
+    .brand p { margin: 3px 0 0; font-size: 0.78rem; color: var(--side-muted); }
     .side-title {
-      font-size: 0.75rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      margin: 0 0 6px;
+      letter-spacing: 0.12em;
+      color: var(--side-muted);
+      margin: 0 0 8px;
     }
-    aside input {
+    aside .muted, aside .status, aside .empty, aside .small, aside .side-item small, aside .icon-btn, aside .team-add { color: var(--side-muted); }
+    aside .team-add { border-color: rgba(255, 255, 255, 0.22); background: transparent; }
+    aside .team-add:hover { border-color: #9ddec8; color: #9ddec8; }
+    aside a { color: #9ddec8; }
+    aside code { color: var(--side-ink); }
+    aside input, aside select {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 8px;
+      border: 1px solid transparent;
+      border-radius: 10px;
       padding: 8px 10px;
-      background: var(--panel);
+      background: #fff;
+      color: var(--ink);
     }
+    aside input:focus, aside select:focus { outline: 2px solid #9ddec8; border-color: transparent; }
+    .team-block { margin: 10px 0 6px; }
+    .team-block p { margin: 0 0 6px; }
+    .team-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 4px;
+      margin-bottom: 4px;
+      align-items: center;
+    }
+    .team-row input, .team-row select { padding: 6px 8px; font-size: 0.82rem; }
+    .team-add {
+      border: 1px dashed var(--line);
+      background: transparent;
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      width: 100%;
+      margin-top: 2px;
+    }
+    .team-add:hover { border-color: var(--accent); color: var(--accent); }
     #integraciones-panel input { margin-bottom: 6px; }
     #integraciones-panel p { margin: 6px 0 4px; }
     .side-item {
@@ -74,7 +123,7 @@
       border-radius: 8px;
       font-size: 0.88rem;
     }
-    .side-item:hover { background: rgba(0, 0, 0, 0.04); }
+    .side-item:hover { background: rgba(255, 255, 255, 0.06); }
     .side-item .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .side-item small { color: var(--muted); display: block; }
     .icon-btn {
@@ -85,7 +134,7 @@
       color: var(--muted);
       font-size: 0.82rem;
     }
-    .icon-btn:hover { background: rgba(0, 0, 0, 0.06); color: var(--ink); }
+    .icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
     .icon-btn.danger:hover { color: var(--danger); }
     .dot {
       display: inline-block;
@@ -109,15 +158,47 @@
       min-width: 0;
     }
     .chat-header {
-      padding: 12px 24px;
+      padding: 14px 28px;
       border-bottom: 1px solid var(--line);
-      background: var(--paper);
+      background: var(--panel);
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 14px;
     }
-    .chat-header strong { font-size: 0.98rem; }
-    .chat-header span { color: var(--muted); font-size: 0.85rem; }
+    .brand-lockup { display: flex; align-items: center; gap: 12px; }
+    .brand-lockup strong {
+      display: block;
+      font-family: var(--serif);
+      font-size: 1.28rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+    }
+    .brand-kicker { color: var(--muted); font-size: 0.78rem; }
+    .project-pill {
+      margin-left: auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+      min-width: 0;
+    }
+    .project-kicker {
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    #subtitulo {
+      font-family: var(--serif);
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+    }
     .messages { overflow-y: auto; padding: 24px 16px 8px; scroll-behavior: smooth; }
     .thread { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
     .msg { display: flex; gap: 12px; align-items: flex-start; }
@@ -142,10 +223,11 @@
     }
     .msg.assistant .bubble {
       background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 4px 14px 14px 14px;
-      padding: 12px 16px;
+      border: 1px solid rgba(23, 32, 51, 0.06);
+      border-radius: 6px 18px 18px 18px;
+      padding: 16px 18px;
       min-width: 0;
+      box-shadow: 0 10px 28px rgba(23, 32, 51, 0.05);
     }
     .msg.user .bubble {
       background: var(--user);
@@ -194,9 +276,10 @@
     .steps li { padding: 3px 0; font-size: 0.9rem; color: var(--muted); }
     .steps li.done { color: var(--accent); }
     .steps li.current { color: var(--ink); font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 6px; }
-    th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-top: 1px solid var(--line); }
-    th { background: #f5f2ec; font-weight: 600; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.86rem; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-top: 1px solid var(--line); }
+    th { background: #f4f7fb; font-weight: 650; font-size: 0.78rem; letter-spacing: 0.02em; color: #3d4a5c; border-top: 0; }
+    tbody tr:nth-child(even) td { background: #fafbfd; }
     details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
 
     /* ---------- Tablero tipo Jira / Trello ---------- */
@@ -315,10 +398,10 @@
 <body>
   <aside id="sidebar">
     <div class="brand">
-      <div class="avatar">H</div>
+      <div class="mark" aria-hidden="true"><svg class="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#f4efe6"/><rect x="5" y="7" width="6" height="18" rx="2" fill="#172033"/><rect x="13" y="7" width="6" height="13" rx="2" fill="#0f6e56"/><rect x="21" y="7" width="6" height="8" rx="2" fill="#d9773a"/></svg></div>
       <div>
-        <h1>Asistente Scrum</h1>
-        <p>Plantillas desde tus casos de uso</p>
+        <h1>Taller Scrum</h1>
+        <p>Casos de uso, tablero y equipo</p>
       </div>
     </div>
 
@@ -339,18 +422,29 @@
       </div>
 
     <div>
-      <details id="equipo-panel">
-        <summary class="side-title" style="display:list-item">Equipo y fechas</summary>
+      <details id="equipo-panel" open>
+        <summary class="side-title" style="display:list-item">Equipo y actores</summary>
+        <p class="small muted">Pon el nombre de cada persona. Sale en la plantilla y en las tareas del tablero.</p>
+        <div class="team-block">
+          <p class="small"><strong>Actores de los casos de uso</strong></p>
+          <div id="actor-filas"></div>
+          <button type="button" class="team-add" id="add-actor">+ Añadir actor</button>
+        </div>
+        <div class="team-block">
+          <p class="small"><strong>Equipo Scrum</strong></p>
+          <div id="equipo-campos"></div>
+          <div id="extra-filas"></div>
+          <button type="button" class="team-add" id="add-extra">+ Añadir desarrollador u otro rol</button>
+        </div>
         <label class="small muted" for="fecha-inicio">Inicio del primer sprint</label>
         <input id="fecha-inicio" type="date">
-        <div id="equipo-campos"></div>
-        <p class="small muted" style="margin:4px 0 0">Si dejas un rol vacío, la tarea queda asignada al rol.</p>
+        <p class="small muted" style="margin:4px 0 0">Si un rol queda vacío, la tarea se asigna al rol (por ejemplo «Dev Backend»).</p>
       </details>
     </div>
 
     <div>
       <details id="integraciones-panel">
-        <summary class="side-title" style="display:list-item">Trello y Jira</summary>
+        <summary class="side-title" style="display:list-item">Trello </summary>
         <p class="small muted" style="margin:4px 0">Las dos APIs son gratuitas. Los datos se guardan solo en este navegador; también puedes ponerlos en <code>.env</code>.</p>
         <p class="small"><strong>Trello</strong> · <a href="https://trello.com/power-ups/admin" target="_blank" rel="noopener">obtener API key</a></p>
         <input id="trello-key" data-integracion="trello.key" placeholder="API key" autocomplete="off">
@@ -369,20 +463,21 @@
       <p class="side-title">Base de conocimiento</p>
       <div id="base" class="status small">Cargando…</div>
     </div>
-
-    <div style="margin-top: auto">
-      <p class="side-title">Estado</p>
-      <div id="status" class="status"><span class="dot"></span>Comprobando Ollama…</div>
-    </div>
   </aside>
 
   <section class="chat">
     <div class="chat-header">
       <button type="button" class="round attach menu" id="menu" title="Proyectos y documentos">☰</button>
-      <div class="avatar">H</div>
-      <div>
-        <strong>Hermes · Asistente Scrum</strong><br>
-        <span id="subtitulo">Proyecto: ejemplo</span>
+      <div class="brand-lockup">
+        <div class="mark" aria-hidden="true"><svg class="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#172033"/><rect x="5" y="7" width="6" height="18" rx="2" fill="#f4efe6"/><rect x="13" y="7" width="6" height="13" rx="2" fill="#3dbe8b"/><rect x="21" y="7" width="6" height="8" rx="2" fill="#e7a15a"/></svg></div>
+        <div>
+          <strong>Taller Scrum</strong>
+          <span class="brand-kicker">casos de uso, tablero y equipo</span>
+        </div>
+      </div>
+      <div class="project-pill">
+        <span class="project-kicker">Proyecto</span>
+        <span id="subtitulo">ejemplo</span>
       </div>
     </div>
 
@@ -400,7 +495,7 @@
         </div>
       </div>
       <input id="archivos" type="file" accept=".pdf,.docx,.txt,.md" multiple hidden>
-      <p class="hint">Hermes solo usa lo que dicen tus documentos. Formatos: PDF, Word (.docx), TXT y Markdown. Enter envía · Shift+Enter nueva línea.</p>
+      <p class="hint">Taller Scrum solo usa lo que dicen tus documentos. Formatos: PDF, Word (.docx), TXT y Markdown. Enter envía · Shift+Enter nueva línea.</p>
     </div>
     </section>
 
@@ -484,7 +579,7 @@
     function mensaje(rol, html) {
       const wrap = document.createElement('div');
       wrap.className = `msg ${rol}`;
-      wrap.innerHTML = `<div class="avatar">${rol === 'assistant' ? 'H' : 'Tú'}</div><div class="bubble">${html}</div>`;
+      wrap.innerHTML = `<div class="avatar">${rol === 'assistant' ? 'T' : 'Tú'}</div><div class="bubble">${html}</div>`;
       $('thread').appendChild(wrap);
       scrollAbajo();
       return wrap.querySelector('.bubble');
@@ -506,20 +601,10 @@
     // ---------- Barra lateral ----------
     async function pintarSalud() {
       try {
-      const data = await api('/api/salud');
-        const ollama = data.ollama_error
-          ? `<span class="dot err"></span>${escapeHtml(data.ollama_error)}`
-          : data.modelos_listos
-            ? `<span class="dot ok"></span>Ollama listo<br><span class="small">Modelo: ${escapeHtml(data.modelo_chat)}</span>`
-            : `<span class="dot warn"></span>Falta un modelo en Ollama<br><span class="small">Ejecuta <code>ollama pull ${escapeHtml(data.modelo_chat)}</code></span>`;
-        const base = data.base_ok
-          ? `<span class="dot ok"></span>PostgreSQL conectado<br><span class="small">${escapeHtml(data.base)}</span>`
-          : `<span class="dot err"></span>${escapeHtml(data.base_error || 'PostgreSQL no responde')}`;
-        $('status').innerHTML = `${ollama}<div style="margin-top: 8px">${base}</div>`;
+        const data = await api('/api/salud');
         pintarBase(data.base_conocimiento);
         return data;
-      } catch (error) {
-        $('status').innerHTML = `<span class="dot err"></span>${escapeHtml(error.message)}`;
+      } catch {
         return null;
       }
     }
@@ -543,7 +628,7 @@
           <div class="side-item">
             <span>📄</span>
             <div class="grow">${escapeHtml(doc.titulo)}
-              <small>${escapeHtml(NOMBRE_TIPO[doc.tipo] || doc.tipo)} · ${doc.indexado ? 'indexado' : 'por indexar'}</small>
+              <small>${escapeHtml(NOMBRE_TIPO[doc.tipo] || doc.tipo)} · ${doc.paquetes || 0} paquete${doc.paquetes === 1 ? '' : 's'} · ${doc.indexado ? 'indexado' : 'por indexar'}</small>
             </div>
             <button type="button" class="icon-btn danger" data-borrar="${doc.id}" title="Eliminar">✕</button>
           </div>`).join('')
@@ -571,12 +656,49 @@
       return `equipo:${proyecto()}`;
     }
 
+    function opcionesRoles(seleccionado) {
+      return ROLES_EQUIPO.map(([value, label]) => (
+        `<option value="${value}"${value === seleccionado ? ' selected' : ''}>${escapeHtml(label)}</option>`
+      )).join('');
+    }
+
+    function filaActor(actor, nombre) {
+      return `<div class="team-row" data-fila="actor">
+        <input data-campo="actor" placeholder="Actor: Administrador" value="${escapeHtml(actor || '')}">
+        <input data-campo="nombre" placeholder="Nombre: Paula" value="${escapeHtml(nombre || '')}">
+        <button type="button" class="icon-btn" data-quitar-fila title="Quitar">✕</button>
+      </div>`;
+    }
+
+    function filaExtra(rol, nombre) {
+      return `<div class="team-row" data-fila="extra">
+        <select data-campo="rol">${opcionesRoles(rol || 'desarrollador_backend')}</select>
+        <input data-campo="nombre" placeholder="Nombre: Yerson" value="${escapeHtml(nombre || '')}">
+        <button type="button" class="icon-btn" data-quitar-fila title="Quitar">✕</button>
+      </div>`;
+    }
+
+    function leerFilas(tipo) {
+      return [...document.querySelectorAll(`[data-fila="${tipo}"]`)].map((row) => {
+        const campo = (name) => {
+          const node = row.querySelector(`[data-campo="${name}"]`);
+          return node ? String(node.value || '').trim() : '';
+        };
+        return tipo === 'actor'
+          ? { actor: campo('actor'), nombre: campo('nombre') }
+          : { rol: campo('rol'), nombre: campo('nombre') };
+      }).filter((row) => Object.values(row).every(Boolean));
+    }
+
     function pintarEquipo() {
       const guardado = JSON.parse(localStorage.getItem(claveEquipo()) || '{}');
       $('fecha-inicio').value = guardado.inicio || '';
       $('equipo-campos').innerHTML = ROLES_EQUIPO.map(([rol, nombre]) => `
         <label class="small muted" for="equipo-${rol}">${nombre}</label>
-        <input id="equipo-${rol}" data-rol="${rol}" placeholder="Nombre (opcional)" value="${escapeHtml((guardado.equipo || {})[rol] || '')}">`).join('');
+        <input id="equipo-${rol}" data-rol="${rol}" placeholder="Nombre de quien lo hace" value="${escapeHtml((guardado.equipo || {})[rol] || '')}">`).join('');
+      const actores = guardado.actores && guardado.actores.length ? guardado.actores : [{ actor: '', nombre: '' }];
+      $('actor-filas').innerHTML = actores.map((row) => filaActor(row.actor, row.nombre)).join('');
+      $('extra-filas').innerHTML = (guardado.extras || []).map((row) => filaExtra(row.rol, row.nombre)).join('');
     }
 
     function opcionesEquipo() {
@@ -584,12 +706,43 @@
       document.querySelectorAll('#equipo-campos [data-rol]').forEach((input) => {
         if (input.value.trim()) equipo[input.dataset.rol] = input.value.trim();
       });
-      return { inicio: $('fecha-inicio').value || '', equipo };
+      return {
+        inicio: $('fecha-inicio').value || '',
+        equipo,
+        extras: leerFilas('extra'),
+        actores: leerFilas('actor'),
+      };
     }
 
-    $('equipo-panel').addEventListener('input', () => {
+    function guardarEquipo() {
       localStorage.setItem(claveEquipo(), JSON.stringify(opcionesEquipo()));
+    }
+
+    $('equipo-panel').addEventListener('input', guardarEquipo);
+    $('equipo-panel').addEventListener('change', guardarEquipo);
+    $('add-actor').onclick = () => {
+      $('actor-filas').insertAdjacentHTML('beforeend', filaActor('', ''));
+      $('actor-filas').lastElementChild.querySelector('input').focus();
+    };
+    $('add-extra').onclick = () => {
+      $('extra-filas').insertAdjacentHTML('beforeend', filaExtra('desarrollador_backend', ''));
+      $('extra-filas').lastElementChild.querySelector('input').focus();
+    };
+    $('equipo-panel').addEventListener('click', (event) => {
+      const boton = event.target.closest('[data-quitar-fila]');
+      if (!boton) return;
+      boton.closest('[data-fila]').remove();
+      guardarEquipo();
     });
+
+    function abrirEquipo() {
+      $('sidebar').classList.add('open');
+      $('equipo-panel').open = true;
+      const vacio = [...document.querySelectorAll('#actor-filas input, #equipo-campos input')]
+        .find((input) => !input.value.trim());
+      const destino = vacio || ($('equipo-campos') && $('equipo-campos').querySelector('input'));
+      if (destino) destino.focus();
+    }
 
     function credencialesIntegracion() {
       const datos = { trello: {}, jira: {} };
@@ -636,7 +789,7 @@
       $('base').innerHTML = `
         <div class="side-item">
           <span>📚</span>
-          <div class="grow">${base.documentos} documento${base.documentos === 1 ? '' : 's'} · ${base.fragmentos} fragmentos
+          <div class="grow">${base.documentos} documento${base.documentos === 1 ? '' : 's'} · ${base.paquetes || 0} paquetes · ${base.fragmentos} embeddings
             <small>Compartida por todos los proyectos${base.documentos > base.indexados ? ` · ${base.documentos - base.indexados} por indexar` : ''}</small>
           </div>
           <button type="button" class="icon-btn" id="abrir-base" title="${abierta ? 'Volver a un proyecto' : 'Cargar documentación a la base'}">${abierta ? 'Salir' : 'Cargar'}</button>
@@ -701,6 +854,19 @@
       return 'caso_uso';
     }
 
+    function mensajeArchivoIlegible(nombre, detalle) {
+      const esPdfSinTexto = /imagen|escaneado|selecciona el texto|texto que se pueda copiar/i.test(detalle);
+      if (esPdfSinTexto) {
+        return `<p>No pude leer <strong>${escapeHtml(nombre)}</strong>. Este PDF es una imagen: no tiene texto que se pueda copiar (pasa si está escaneado o si se guardó con <em>Imprimir → PDF</em>).</p>
+          <p>Puedes hacer una de estas dos cosas:</p>
+          <ul>
+            <li>Adjuntar el <strong>PDF original</strong>, el que sí deja seleccionar el texto.</li>
+            <li>Abrir el archivo, <strong>copiar el contenido</strong> y pegarlo aquí.</li>
+          </ul>`;
+      }
+      return `<p class="error">No pude leer <strong>${escapeHtml(nombre)}</strong>. ${escapeHtml(detalle)}</p>`;
+    }
+
     function leerBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -718,6 +884,7 @@
         }
         if (item.estado === 'error') {
           return `<span class="file-chip err" title="${escapeHtml(item.error)}">⚠ <span class="name">${escapeHtml(item.archivo)}</span>
+            <small>sin texto</small>
             <button type="button" data-quitar="${item.key}" title="Quitar">×</button></span>`;
         }
         return `<span class="file-chip">📄 <span class="name" title="${escapeHtml(item.titulo)}">${escapeHtml(item.archivo)}</span>
@@ -744,6 +911,7 @@
           });
       } catch (error) {
           Object.assign(item, { estado: 'error', error: error.message });
+          asistente(mensajeArchivoIlegible(file.name, error.message));
         }
         pintarAdjuntos();
       }
@@ -787,13 +955,13 @@
       const fallidos = [];
       for (const item of listos) {
         try {
-          await postJson('/api/documentos', {
+          const created = await postJson('/api/documentos', {
             proyecto: proyecto(),
             titulo: item.titulo,
             tipo: item.tipo,
             contenido: item.contenido,
           });
-          guardados.push(item);
+          guardados.push({ ...item, paquetes: created.paquetes });
       } catch (error) {
           fallidos.push({ ...item, error: error.message });
         }
@@ -811,7 +979,7 @@
       }
       const partes = [];
       if (guardados.length) {
-        partes.push(`<p>Guardé en la base de conocimiento:</p><ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${item.contenido.length.toLocaleString('es')} caracteres</span>
+        partes.push(`<p>Guardé en la base de conocimiento:</p><ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${item.contenido.length.toLocaleString('es')} caracteres${item.paquetes ? ` · ${item.paquetes} paquetes` : ''}</span>
           ${item.depuracion ? `<div class="small muted">🧹 ${escapeHtml(item.depuracion)}</div>` : ''}</li>`).join('')}</ul>`);
       }
       if (fallidos.length) {
@@ -824,7 +992,7 @@
       const partes = [];
       if (guardados.length) {
         partes.push(`<p>Listo, guardé ${guardados.length === 1 ? 'este documento' : `estos ${guardados.length} documentos`} en el proyecto <strong>${escapeHtml(proyecto())}</strong>:</p>`);
-        partes.push(`<ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${escapeHtml(NOMBRE_TIPO[item.tipo])} · ${item.contenido.length.toLocaleString('es')} caracteres</span>
+        partes.push(`<ul>${guardados.map((item) => `<li><strong>${escapeHtml(item.titulo)}</strong> <span class="muted small">· ${escapeHtml(NOMBRE_TIPO[item.tipo])} · ${item.contenido.length.toLocaleString('es')} caracteres${item.paquetes ? ` · ${item.paquetes} paquetes` : ''}</span>
           ${item.depuracion ? `<div class="small muted">🧹 ${escapeHtml(item.depuracion)}</div>` : ''}
           <details><summary>Ver el texto que leí</summary><pre>${escapeHtml(item.contenido.slice(0, 4000))}${item.contenido.length > 4000 ? '\n…' : ''}</pre></details></li>`).join('')}</ul>`);
       }
@@ -833,7 +1001,7 @@
       }
       const totalCasos = documentos.filter((doc) => doc.tipo === 'caso_uso' || doc.tipo === 'manual').length;
       partes.push(`<p>El proyecto tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} (${totalCasos} de casos de uso o manuales). Puedes adjuntar más o pedirme la plantilla.</p>`);
-      partes.push(botones([['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]));
+      partes.push(botones([['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]));
       return partes.join('');
     }
 
@@ -912,7 +1080,7 @@
         await refrescarLateral();
         asistente(`<p>Cargué los casos de uso de ejemplo en el proyecto <strong>ejemplo</strong>:</p>
           <ul>${documentos.map((doc) => `<li>${escapeHtml(doc.titulo)}</li>`).join('')}</ul>
-          ${botones([['generar', '✨ Generar plantilla Scrum', true]])}`);
+          ${botones([['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum', true]])}`);
       } catch (error) {
         asistente(`<p class="error">${escapeHtml(error.message)}</p>`);
       } finally {
@@ -1018,6 +1186,16 @@
       } else if (accion === 'preguntar-actores') {
         usuario('¿Qué actores participan en los casos de uso?');
         preguntar('¿Qué actores participan en los casos de uso?');
+      } else if (accion === 'definir-equipo') {
+        usuario('Quiero poner los nombres del equipo y de los actores');
+        abrirEquipo();
+        asistente(`<p>En la barra lateral, <strong>Equipo y actores</strong>, escribe quién es cada persona.</p>
+          <ul>
+            <li><strong>Actores:</strong> el rol del caso de uso y el nombre real (Administrador → Paula).</li>
+            <li><strong>Equipo Scrum:</strong> Product Owner, desarrolladores, QA, DevOps…</li>
+          </ul>
+          <p>Esos nombres aparecen en la plantilla y en las tarjetas del tablero. Si un rol queda vacío, se usa el nombre del rol.</p>
+          ${botones([['generar', '✨ Generar plantilla Scrum', true]])}`);
       }
     });
 
@@ -1119,12 +1297,9 @@
         ${botones([
           ...(plantilla.tablero ? [
             [`exportar-trello-${id}`, '📤 Crear en Trello', true],
-            [`exportar-jira-${id}`, '📤 Crear en Jira', true],
             [`descargar-html-${id}`, '🗂️ Tablero independiente (HTML)'],
           ] : []),
           [`descargar-md-${id}`, '⬇ Descargar Markdown', !plantilla.tablero],
-          ...(plantilla.tablero ? [[`descargar-csv-${id}`, '⬇ CSV para Jira / Trello']] : []),
-          [`descargar-json-${id}`, '⬇ Descargar JSON'],
           ['generar', '↻ Generar de nuevo'],
         ])}
       `);
@@ -1598,19 +1773,38 @@
         }
       }, 1200);
       try {
+        const inicio = (plantilla.fases && plantilla.fases.inicio && plantilla.fases.inicio.analisis) || {};
+        const calidad = (plantilla.fases && plantilla.fases.calidad && plantilla.fases.calidad.analisis) || {};
         const data = await postJson('/api/exportar', {
           destino,
-          plantilla: { proyecto: plantilla.proyecto, modelo: plantilla.modelo, generado_en: plantilla.generado_en, tablero: plantilla.tablero },
+          plantilla: {
+            proyecto: plantilla.proyecto,
+            modelo: plantilla.modelo,
+            generado_en: plantilla.generado_en,
+            tablero: plantilla.tablero,
+            resumen: {
+              vision: inicio.vision,
+              actores: inicio.actores,
+              objetivos: inicio.objetivos,
+              dentro_de_alcance: inicio.dentro_de_alcance,
+              fuera_de_alcance: inicio.fuera_de_alcance,
+              definition_of_done: calidad.definition_of_done,
+              definition_of_ready: calidad.definition_of_ready,
+              riesgos: calidad.riesgos,
+              ceremonias: calidad.ceremonias,
+              roles: calidad.roles,
+            },
+          },
           credenciales: credencialesIntegracion()[destino],
         });
         const creadas = data.creadas || {};
         burbuja.innerHTML = `<p>✅ Listo. Creé <strong>${escapeHtml(data.nombre)}</strong> en ${nombre}: ${creadas.historias} historias y ${creadas.tareas} tareas${creadas.sprints != null ? ` en ${creadas.sprints} sprint${creadas.sprints === 1 ? '' : 's'}` : ''}.</p>
           <p><a href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Abrir en ${nombre} ↗</a></p>
-          ${destino === 'trello' ? '<p class="small muted">Las historias del primer sprint están en «Por hacer»; las demás en «Product backlog» con la etiqueta de su sprint. Cada tarjeta tiene la lista de tareas con responsable y horas.</p>' : ''}
+          ${destino === 'trello' ? '<p class="small muted">El tablero tiene una lista 📌 Proyecto (visión, equipo, DoD), una lista por sprint con sus historias, y las columnas En progreso / En revisión / Hecho para mover tarjetas. Cada historia lleva portada por prioridad, etiquetas, criterios y tareas con responsable y horas.</p>' : ''}
           ${(data.avisos || []).length ? `<ul>${data.avisos.map((aviso) => `<li class="warn small">${escapeHtml(aviso)}</li>`).join('')}</ul>` : ''}`;
       } catch (error) {
         burbuja.innerHTML = `<p class="error">No pude crear el tablero en ${nombre}: ${escapeHtml(error.message)}</p>
-          <p class="small muted">Revisa los datos en la barra lateral, sección <strong>Trello y Jira</strong>.</p>`;
+          <p class="small muted">Revisa los datos en la barra lateral, sección <strong>Trello</strong>.</p>`;
         $('integraciones-panel').open = true;
       } finally {
         clearInterval(timer);
@@ -1638,7 +1832,7 @@
 
     let cambio;
     function cambiarProyecto(saludar = true) {
-      $('subtitulo').textContent = `Proyecto: ${proyecto() || 'sin nombre'}`;
+      $('subtitulo').textContent = proyecto() || 'sin nombre';
       if (!saludar) return;
       clearTimeout(cambio);
       cambio = setTimeout(async () => {
@@ -1651,7 +1845,7 @@
           asistente(`<p>Cambiamos al proyecto <strong>${escapeHtml(proyecto())}</strong>. ${documentos.length
             ? `Tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} cargado${documentos.length === 1 ? '' : 's'}.`
             : 'Todavía no tiene documentos: adjúntalos con 📎.'}</p>
-            ${documentos.length ? botones([['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]) : botones([['adjuntar', '📎 Adjuntar manual', true]])}`);
+            ${documentos.length ? botones([['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]) : botones([['adjuntar', '📎 Adjuntar manual', true]])}`);
         }
       }, 600);
     }
@@ -1671,19 +1865,20 @@
       }
       const avisoModelo = avisos.join('');
       asistente(`
-        <p>¡Hola! Soy <strong>Hermes</strong>, tu asistente Scrum. 👋</p>
+        <p>¡Hola! Esto es <strong>Taller Scrum</strong>. Convierto tus casos de uso en una plantilla con tablero, equipo y ceremonias. 👋</p>
         <p>Dame los <strong>manuales de casos de uso</strong> de tu proyecto de software y te genero la <strong>plantilla Scrum</strong>: product backlog con historias de usuario, story points, sprints, definition of done, riesgos y ceremonias. Solo uso lo que dicen tus documentos.</p>
         <p><strong>Cómo empezar:</strong></p>
         <ul>
           <li>Pulsa <strong>📎</strong> (o arrastra los archivos aquí) para adjuntar PDF, Word, TXT o Markdown.</li>
           <li>También puedes <strong>pegar el texto</strong> de un caso de uso y enviarlo.</li>
+          <li>En <strong>Equipo y actores</strong> (barra lateral) puedes poner el nombre de cada actor y de cada desarrollador.</li>
           <li>Después dime <em>«Genera la plantilla Scrum»</em>.</li>
         </ul>
         ${documentos.length ? `<p class="small muted">El proyecto <strong>${escapeHtml(proyecto())}</strong> ya tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'}.</p>` : ''}
         ${avisoModelo}
         ${botones(documentos.length
-          ? [['adjuntar', '📎 Adjuntar manual', true], ['generar', '✨ Generar plantilla Scrum'], ['preguntar-actores', '¿Qué actores hay?']]
-          : [['adjuntar', '📎 Adjuntar manual', true], ['ejemplo', 'Usar casos de ejemplo']])}
+          ? [['adjuntar', '📎 Adjuntar manual', true], ['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum'], ['preguntar-actores', '¿Qué actores hay?']]
+          : [['adjuntar', '📎 Adjuntar manual', true], ['definir-equipo', '👥 Nombres del equipo'], ['ejemplo', 'Usar casos de ejemplo']])}
       `);
       $('entrada').focus();
     }
