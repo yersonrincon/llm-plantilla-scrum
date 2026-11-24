@@ -9,6 +9,7 @@ const { ollamaVersion, installedModels, assertModels } = require('./ollama');
 const { indexProject, indexDocument } = require('./rag');
 const { extractText, EXTENSIONS } = require('./extract');
 const { generarPlantilla, preguntar } = require('./workflow');
+const { clasificarFuente, filtrarFuentes } = require('./validar');
 const samples = require('./samples');
 
 function httpError(message, status) {
@@ -51,6 +52,20 @@ async function agregarDocumento({ proyecto, titulo, tipo, contenido }) {
     throw httpError(`Tipo inválido. Usa: ${DOCUMENT_TYPES.join(', ')}`, 400);
   }
   if (!content) throw httpError('El contenido está vacío', 400);
+  if (type === 'caso_uso' || type === 'manual') {
+    let resultado;
+    try {
+      resultado = await clasificarFuente(title, content);
+    } catch (error) {
+      throw httpError(`No pude validar «${title}» con Ollama. ${error.message}`, error.status || 502);
+    }
+    if (!resultado.aceptado) {
+      throw httpError(
+        `«${title}» no es un caso de uso ni un manual de requisitos. ${resultado.motivo} No lo guardé como fuente de la plantilla.`,
+        422
+      );
+    }
+  }
   const existing = await documentQueries.findSameContent(project, content);
   if (existing) {
     throw httpError(`Ese documento ya está guardado en "${project}" como «${existing.title}»`, 409);
@@ -213,6 +228,16 @@ async function cargarCarpeta({ carpeta, proyecto, tipo, indexar = true }, onProg
         omitidos.push(relative);
         continue;
       }
+      if (type === 'caso_uso' || type === 'manual') {
+        const resultado = await clasificarFuente(title, contenido);
+        if (!resultado.aceptado) {
+          errores.push({
+            archivo: relative,
+            error: `No es un caso de uso ni un manual de requisitos. ${resultado.motivo}`,
+          });
+          continue;
+        }
+      }
       const packets = splitPackets(contenido);
       const id = await documentQueries.create(title, contenido, type, project, packets);
       known.add(title.toLowerCase());
@@ -320,8 +345,18 @@ function opcionesTablero({ inicio, equipo, extras, actores } = {}) {
 async function crearPlantilla(proyecto, nombre, onProgress, opciones) {
   const project = assertProject(proyecto);
   const tablero = opcionesTablero(opciones);
+  const documents = await documentQueries.list(project);
+  const sources = documents.filter((document) => document.type === 'caso_uso' || document.type === 'manual');
+  if (!sources.length) {
+    throw httpError(
+      `No hay casos de uso ni manuales de "${project}" en la base. Cárgalos antes de generar la plantilla.`,
+      400
+    );
+  }
+  const fuentes = await filtrarFuentes(documents, onProgress);
+  if (!fuentes.aceptados.length) throw httpError(fuentes.mensaje, 400);
   await indexarConBase(project, onProgress);
-  return generarPlantilla(project, nombre, onProgress, tablero);
+  return generarPlantilla(project, nombre, onProgress, tablero, fuentes);
 }
 
 async function consultar(proyecto, pregunta) {

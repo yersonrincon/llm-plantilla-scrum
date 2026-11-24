@@ -118,9 +118,9 @@ async function retrieveKnowledge(queryVector, budgetChars) {
   return selectRanked(relevant, budgetChars).map((row) => ({ ...row, origen: 'base_conocimiento' }));
 }
 
-async function retrieve(project, query, types, { conBase = false } = {}) {
+async function retrieve(project, query, types, { conBase = false, excluir = [] } = {}) {
   const queryVector = await embedText(query);
-  const rows = await embeddingQueries.search(project, types, queryVector);
+  const rows = await embeddingQueries.search(project, types, queryVector, config.embedModel, null, excluir);
   if (!rows.length) {
     const error = new Error(
       `No hay embeddings para "${project}". Ejecuta: node engine/cli.js indexar --proyecto "${project}"`

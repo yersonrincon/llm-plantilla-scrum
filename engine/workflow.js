@@ -2,7 +2,17 @@ const { config } = require('./config');
 const { documentQueries, templateQueries } = require('./db');
 const { assertModels, chatJson } = require('./ollama');
 const { retrieve, formatContext } = require('./rag');
+const { filtrarFuentes } = require('./validar');
 const { ROLES, normalizeTasks, buildBoard } = require('./board');
+const {
+  idiomaDe,
+  idiomaDeDocumentos,
+  textoFalta,
+  esFalta,
+  reglaPlantilla,
+  reglaRespuesta,
+  instruccionesEnIdioma,
+} = require('./idioma');
 
 const SYSTEM = [
   'Eres Hermes, analista de proyectos de software y de Scrum.',
@@ -13,7 +23,8 @@ const SYSTEM = [
   'La base de conocimiento solo sirve para cómo aplicar Scrum: definition of done, definition of ready,',
   'ceremonias, roles, estimación, duración de sprints y riesgos típicos.',
   'No inventes pantallas, actores, integraciones ni reglas que no estén escritas ahí.',
-  'Si un dato no está, escribe exactamente "No consta en los manuales".',
+  'Los documentos y las preguntas pueden estar en español o en inglés. Trátalos igual y no ignores un fragmento por su idioma.',
+  'Si un dato no está, escribe exactamente "No consta en los manuales", o "Not stated in the source documents" cuando la plantilla va en inglés.',
   'Cada elemento debe citar fuente_documento con el título exacto del documento del fragmento que usaste.',
   'Responde únicamente un objeto JSON, sin markdown.',
 ].join(' ');
@@ -45,14 +56,15 @@ function titlesOf(documents) {
 
 function sourceMatches(source, titles) {
   const value = String(source || '').trim().toLowerCase();
-  if (!value || value === 'no consta en los manuales') return false;
+  if (!value || esFalta(value)) return false;
   return titles.some((title) => {
     const known = title.toLowerCase();
     return value === known || value.includes(known) || known.includes(value);
   });
 }
 
-function normalizeBacklog(analysis, titles) {
+function normalizeBacklog(analysis, titles, idioma = 'es') {
+  const falta = textoFalta(idioma);
   const data = analysis && typeof analysis === 'object' && !Array.isArray(analysis) ? analysis : {};
   const items = Array.isArray(data.product_backlog) ? data.product_backlog : [];
   data.product_backlog = items.map((raw, index) => {
@@ -61,19 +73,19 @@ function normalizeBacklog(analysis, titles) {
     const fuente = item.fuente_documento || '';
     const grounded = sourceMatches(fuente, titles);
     const historia = String(item.historia || '').trim();
-    const sinTitulo = !String(item.titulo || '').trim() || /no consta en los manuales/i.test(item.titulo);
-    const usable = historia && !/no consta|^como \.\.\./i.test(historia);
+    const sinTitulo = !String(item.titulo || '').trim() || esFalta(item.titulo);
+    const usable = historia && !esFalta(historia) && !/^(como|as a)\s+\.\.\./i.test(historia);
     return {
       id: item.id || `US-${String(index + 1).padStart(3, '0')}`,
       titulo: sinTitulo
-        ? (usable ? historia.replace(/\s+/g, ' ').slice(0, 70) : 'No consta en los manuales')
+        ? (usable ? historia.replace(/\s+/g, ' ').slice(0, 70) : falta)
         : item.titulo,
-      historia: item.historia || 'No consta en los manuales',
+      historia: item.historia || falta,
       criterios_aceptacion: asList(item.criterios_aceptacion),
-      prioridad: item.prioridad || 'Media',
+      prioridad: item.prioridad || (idioma === 'en' ? 'Medium' : 'Media'),
       story_points: nearestFibonacci(item.story_points),
       fase_proyecto: fase,
-      fuente_documento: grounded ? fuente : 'No consta en los manuales',
+      fuente_documento: grounded ? fuente : falta,
       advertencia: grounded ? undefined : 'La fuente no coincide con un documento de la base',
     };
   });
@@ -117,8 +129,11 @@ function contextSummary(picked) {
   }));
 }
 
-async function runPhase(project, documents, phase, previous) {
-  const { picked, omitted } = await retrieve(project, phase.query, phase.types, { conBase: phase.conBase });
+async function runPhase(project, documents, phase, previous, excluir, idioma) {
+  const { picked, omitted } = await retrieve(project, phase.query, phase.types, {
+    conBase: phase.conBase,
+    excluir,
+  });
   const omittedText = omitted.length
     ? omitted.join(', ')
     : 'ninguno';
@@ -149,7 +164,9 @@ async function runPhase(project, documents, phase, previous) {
         'Resultado de fases anteriores:',
         previousText,
         '',
-        phase.instructions,
+        instruccionesEnIdioma(phase.instructions, idioma),
+        '',
+        reglaPlantilla(idioma),
       ].join('\n'),
     },
   ]);
@@ -168,7 +185,7 @@ const PHASES = [
     id: 'inicio',
     title: 'Inicio: alcance y actores',
     types: ['caso_uso', 'manual'],
-    query: 'actores objetivos alcance precondiciones flujos del caso de uso',
+    query: 'actores objetivos alcance precondiciones flujos del caso de uso. actors goals scope preconditions main flow use case',
     instructions: `Extrae solo lo que los casos de uso y manuales dicen del producto.
 Devuelve JSON:
 {
@@ -183,7 +200,7 @@ Devuelve JSON:
     id: 'backlog',
     title: 'Product backlog',
     types: ['caso_uso', 'manual'],
-    query: 'criterios de aceptación flujos alternos prioridad dependencias requisitos',
+    query: 'criterios de aceptación flujos alternos prioridad dependencias requisitos. acceptance criteria alternate flows priority dependencies requirements user story',
     instructions: `Convierte los casos de uso en historias. Una historia por flujo principal y otra por cada flujo alterno importante que esté escrito.
 No crees historias de infraestructura que el texto no pida.
 fase_proyecto solo puede ser: inicio, sprint_0, construccion, integracion, release.
@@ -209,7 +226,7 @@ Devuelve JSON:
     title: 'Plan de fases y sprints',
     types: ['caso_uso', 'manual', 'guia'],
     conBase: true,
-    query: 'dependencias prioridad sprint duración planificación incremento',
+    query: 'dependencias prioridad sprint duración planificación incremento. dependencies priority sprint length planning increment',
     instructions: `Organiza el trabajo en este orden fijo de fases y no te saltes ninguna: sprint_0, construccion, integracion, release.
 Devuelve un objeto de plan por cada una de esas 4 fases, aunque alguna fase tenga el array historias vacío.
 - sprint_0: preparación (entorno, datos de prueba, historias Ready). Como máximo 1 sprint.
@@ -235,7 +252,7 @@ Devuelve JSON:
     title: 'Calidad, dependencias y ceremonias',
     types: ['caso_uso', 'manual', 'guia'],
     conBase: true,
-    query: 'definition of done criterios pruebas dependencias daily review retrospectiva',
+    query: 'definition of done criterios pruebas dependencias daily review retrospectiva. acceptance criteria testing dependencies sprint review retrospective',
     instructions: `La definition of done funcional debe salir de los criterios escritos en los casos de uso, en la guía de calidad del proyecto y en las buenas prácticas de la base de conocimiento.
 Las ceremonias y roles se detallan si una guía del proyecto o un fragmento de la base de conocimiento los describe; adáptalos a este proyecto. Si no están en los fragmentos, rellena el texto con "No consta en los manuales".
 Las dependencias solo se aceptan si un caso de uso dice que un flujo requiere otro.
@@ -271,7 +288,7 @@ function describeStory(story) {
   ].filter(Boolean).join('\n');
 }
 
-async function generarTareas(backlog, onProgress) {
+async function generarTareas(backlog, onProgress, idioma = 'es') {
   const tasksByStory = new Map();
   const batches = [];
   for (let index = 0; index < backlog.length; index += TASK_BATCH) batches.push(backlog.slice(index, index + TASK_BATCH));
@@ -292,6 +309,11 @@ async function generarTareas(backlog, onProgress) {
             batch.map(describeStory).join('\n'),
             '',
             `Roles del equipo: ${Object.keys(ROLES).join(', ')}.`,
+            idioma === 'en'
+              ? 'Write every task title in English.'
+              : idioma === 'mixto'
+                ? 'Escribe el título de cada tarea en el idioma de su historia.'
+                : 'Escribe los títulos de las tareas en español.',
             'Para cada historia crea de 3 a 6 tareas concretas y verificables (análisis, base de datos, backend, frontend, pruebas, despliegue), solo las que la historia necesite.',
             'Cada tarea lleva el rol que la hace y sus horas (1 a 16). Usa entre 4 y 6 horas por story point en total.',
             'tipo solo puede ser: analisis, diseno, desarrollo, base_datos, pruebas, despliegue, documentacion.',
@@ -347,11 +369,23 @@ function applyPeople(payload, opciones = {}) {
   if (miembros.length) calidad.roles.equipo = miembros.join('; ');
 }
 
-async function generarPlantilla(project, name, onProgress, opciones = {}) {
+async function generarPlantilla(project, name, onProgress, opciones = {}, fuentesPrevias) {
   const documents = await requireDocuments(project);
   await assertModels();
+  const fuentes = fuentesPrevias || await filtrarFuentes(documents, onProgress);
+  if (!fuentes.aceptados.length) {
+    const error = new Error(fuentes.mensaje);
+    error.status = 400;
+    throw error;
+  }
+  const idioma = idiomaDeDocumentos(fuentes.aceptados.map((item) => {
+    const document = documents.find((row) => row.id === item.id);
+    return document || { title: item.titulo, content: '' };
+  }));
+  const excluir = new Set(fuentes.excluir);
+  const usable = documents.filter((document) => !excluir.has(document.id));
   const requirementTitles = titlesOf(
-    documents.filter((document) => document.type === 'caso_uso' || document.type === 'manual')
+    usable.filter((document) => document.type === 'caso_uso' || document.type === 'manual')
   );
 
   const fases = {};
@@ -359,9 +393,9 @@ async function generarPlantilla(project, name, onProgress, opciones = {}) {
   let tablero = null;
   for (const phase of PHASES) {
     if (onProgress) onProgress(phase.title);
-    const result = await runPhase(project, documents, phase, previous);
+    const result = await runPhase(project, usable, phase, previous, fuentes.excluir, idioma);
     if (phase.id === 'backlog') {
-      result.analisis = normalizeBacklog(result.analisis, requirementTitles);
+      result.analisis = normalizeBacklog(result.analisis, requirementTitles, idioma);
       if (!result.analisis.product_backlog.length) {
         const error = new Error('Hermes no produjo historias a partir de los documentos indexados.');
         error.status = 502;
@@ -378,7 +412,7 @@ async function generarPlantilla(project, name, onProgress, opciones = {}) {
       tablero = buildBoard(
         backlog,
         result.analisis && result.analisis.plan,
-        await generarTareas(backlog, onProgress),
+        await generarTareas(backlog, onProgress, idioma),
         opciones
       );
     }
@@ -387,14 +421,20 @@ async function generarPlantilla(project, name, onProgress, opciones = {}) {
   const vision = (fases.inicio.analisis && fases.inicio.analisis.vision) || '';
   const payload = {
     proyecto: project,
+    idioma,
     modelo: config.chatModel,
     embeddings: config.embedModel,
     perfil_rx_vram_gb: config.rxVram,
     generado_en: new Date().toISOString(),
-    documentos_base: documents.map((document) => ({
+    documentos_base: usable.map((document) => ({
       id: document.id,
       titulo: document.title,
       tipo: document.type,
+    })),
+    documentos_descartados: fuentes.rechazados.map((document) => ({
+      id: document.id,
+      titulo: document.titulo,
+      motivo: document.motivo,
     })),
     base_conocimiento: [...new Set(Object.values(fases).flatMap((fase) => (
       fase.contexto.filter((row) => row.origen === 'base_conocimiento').map((row) => row.documento)
@@ -425,6 +465,7 @@ async function generarPlantilla(project, name, onProgress, opciones = {}) {
 async function preguntar(project, question) {
   const documents = await requireDocuments(project);
   await assertModels();
+  const idioma = idiomaDe(question, idiomaDeDocumentos(documents));
   const { picked, omitted } = await retrieve(
     project,
     question,
@@ -452,7 +493,8 @@ async function preguntar(project, question) {
         formatContext(picked),
         '',
         'Devuelve JSON: {"respuesta": "", "fuentes": [""]}',
-        'La respuesta debe apoyarse en los fragmentos. Lo que sea del proyecto sale de origen=proyecto.',
+        reglaRespuesta(idioma),
+        'La respuesta debe apoyarse en los fragmentos, estén en español o en inglés. Lo que sea del proyecto sale de origen=proyecto.',
         'fuentes debe listar los títulos de los documentos usados.',
       ].join('\n'),
     },

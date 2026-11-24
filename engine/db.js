@@ -391,8 +391,17 @@ const embeddingQueries = {
     );
     return rows[0].total;
   },
-  async search(project, types, vector, model = config.embedModel, limit = null) {
+  async search(project, types, vector, model = config.embedModel, limit = null, excludeIds = []) {
     assertKnownTypes(types);
+    const excluded = (Array.isArray(excludeIds) ? excludeIds : [])
+      .map(Number)
+      .filter((id) => Number.isInteger(id));
+    const params = [vector.map(Number), project, types, model, limit];
+    let excludeClause = '';
+    if (excluded.length) {
+      params.push(excluded);
+      excludeClause = `AND NOT (d.id = ANY($${params.length}::int[]))`;
+    }
     const { rows } = await query(`
       SELECT e.id, e.document_id, e.chunk_text, e.chunk_index,
              d.title, d.type, d.project,
@@ -400,9 +409,10 @@ const embeddingQueries = {
       FROM embeddings e
       JOIN documents d ON d.id = e.document_id
       WHERE d.project = $2 AND d.type = ANY($3::text[]) AND e.model = $4
+        ${excludeClause}
       ORDER BY similarity DESC
       LIMIT $5
-    `, [vector.map(Number), project, types, model, limit]);
+    `, params);
     return rows.map((row) => ({ ...row, similarity: Number(row.similarity) }));
   },
   async projectStats(project, model = config.embedModel) {

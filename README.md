@@ -79,7 +79,7 @@ ollama serve
 npm start
 ```
 
-La aplicación estará disponible en: **http://127.0.0.1:43124**
+La aplicación estará disponible en: **http://3000
 
 Todo lo que hace la interfaz web también se puede hacer por consola con `node engine/cli.js help`.
 

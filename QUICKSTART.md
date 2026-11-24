@@ -42,7 +42,7 @@ ollama serve
 npm start
 ```
 
-La aplicación estará en: **http://127.0.0.1:43124**
+La aplicación estará en: **http://3000
 
 ## Funcionalidades sin Ollama
 

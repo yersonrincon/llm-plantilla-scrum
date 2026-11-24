@@ -149,6 +149,9 @@
     .dot.err { background: var(--danger); }
     .status { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
     .empty { font-size: 0.84rem; color: var(--muted); padding: 4px 8px; }
+    .side-scroll { max-height: 240px; overflow: auto; }
+    aside summary.side-title { cursor: pointer; margin-bottom: 0; }
+    aside details[open] summary.side-title { margin-bottom: 8px; }
 
     /* ---------- Chat ---------- */
     .chat {
@@ -413,16 +416,11 @@
 
     <div>
       <p class="side-title">Manuales del proyecto</p>
-      <div id="docs"><p class="empty">Cargando…</p></div>
+      <div id="docs" class="side-scroll"><p class="empty">Cargando…</p></div>
       </div>
 
     <div>
-      <p class="side-title">Plantillas generadas</p>
-      <div id="plantillas"><p class="empty">Cargando…</p></div>
-      </div>
-
-    <div>
-      <details id="equipo-panel" open>
+      <details id="equipo-panel">
         <summary class="side-title" style="display:list-item">Equipo y actores</summary>
         <p class="small muted">Pon el nombre de cada persona. Sale en la plantilla y en las tareas del tablero.</p>
         <div class="team-block">
@@ -463,6 +461,13 @@
       <p class="side-title">Base de conocimiento</p>
       <div id="base" class="status small">Cargando…</div>
     </div>
+
+    <div>
+      <details id="plantillas-panel">
+        <summary class="side-title" style="display:list-item">Plantillas generadas <span id="plantillas-cuenta"></span></summary>
+        <div id="plantillas" class="side-scroll"><p class="empty">Cargando…</p></div>
+      </details>
+    </div>
   </aside>
 
   <section class="chat">
@@ -490,7 +495,7 @@
         <div class="attachments" id="adjuntos" hidden></div>
         <div class="input-row">
           <button type="button" class="round attach" id="adjuntar" title="Adjuntar manual o caso de uso (PDF, Word, TXT, MD)">📎</button>
-          <textarea id="entrada" rows="1" placeholder="Adjunta tus casos de uso, pega su texto o pídeme «Genera la plantilla Scrum»…"></textarea>
+          <textarea id="entrada" rows="1" placeholder="Adjunta casos de uso en español o en inglés, pega su texto o pídeme «Genera la plantilla Scrum»…"></textarea>
           <button type="button" class="round send" id="enviar" title="Enviar">➤</button>
         </div>
       </div>
@@ -516,6 +521,7 @@
       release: 'Release',
     };
     const FASES_ANALISIS = [
+      ['Validando', 'Comprobando con Ollama que sean casos de uso'],
       ['Indexando', 'Leyendo e indexando tus documentos'],
       ['Inicio', 'Visión, actores y alcance'],
       ['Product backlog', 'Historias de usuario y story points'],
@@ -635,21 +641,38 @@
         : '<p class="empty">Sin documentos. Adjúntalos en el chat.</p>';
     }
 
+    let mostrarTodasLasPlantillas = false;
+    const PLANTILLAS_RECIENTES = 4;
+
+    function filaPlantilla(item) {
+      return `
+        <div class="side-item">
+          <span>🗂️</span>
+          <div class="grow">${escapeHtml(item.name)}<small>${escapeHtml(new Date(item.created_at).toLocaleString('es'))}</small></div>
+          <button type="button" class="icon-btn" data-abrir="${item.id}" title="Mostrar en el chat">Ver</button>
+        </div>`;
+    }
+
     async function pintarPlantillas() {
+      const cuenta = $('plantillas-cuenta');
       if (!proyecto()) {
         $('plantillas').innerHTML = '';
+        if (cuenta) cuenta.textContent = '';
         return;
       }
       const data = await api('/api/plantillas?proyecto=' + encodeURIComponent(proyecto()));
       const items = data.plantillas || [];
-      $('plantillas').innerHTML = items.length
-        ? items.map((item) => `
-          <div class="side-item">
-            <span>🗂️</span>
-            <div class="grow">${escapeHtml(item.name)}<small>${escapeHtml(new Date(item.created_at).toLocaleString('es'))}</small></div>
-            <button type="button" class="icon-btn" data-abrir="${item.id}" title="Mostrar en el chat">Ver</button>
-          </div>`).join('')
-        : '<p class="empty">Todavía no hay plantillas.</p>';
+      if (cuenta) cuenta.textContent = items.length ? `(${items.length})` : '';
+      if (!items.length) {
+        $('plantillas').innerHTML = '<p class="empty">Todavía no hay plantillas.</p>';
+        return;
+      }
+      const visibles = mostrarTodasLasPlantillas ? items : items.slice(0, PLANTILLAS_RECIENTES);
+      const ocultas = items.length - visibles.length;
+      const toggle = items.length > PLANTILLAS_RECIENTES
+        ? `<button type="button" class="team-add" id="ver-plantillas">${ocultas ? `Ver las otras ${ocultas}` : 'Mostrar solo las recientes'}</button>`
+        : '';
+      $('plantillas').innerHTML = visibles.map(filaPlantilla).join('') + toggle;
     }
 
     function claveEquipo() {
@@ -834,6 +857,11 @@
     });
 
     $('plantillas').addEventListener('click', async (event) => {
+      if (event.target.id === 'ver-plantillas') {
+        mostrarTodasLasPlantillas = !mostrarTodasLasPlantillas;
+        pintarPlantillas();
+        return;
+      }
       const id = event.target.dataset && event.target.dataset.abrir;
       if (!id) return;
       try {
@@ -1000,8 +1028,13 @@
         partes.push(`<p class="error">No pude guardar: ${fallidos.map((item) => `${escapeHtml(item.archivo)} (${escapeHtml(item.error)})`).join(', ')}</p>`);
       }
       const totalCasos = documentos.filter((doc) => doc.tipo === 'caso_uso' || doc.tipo === 'manual').length;
-      partes.push(`<p>El proyecto tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} (${totalCasos} de casos de uso o manuales). Puedes adjuntar más o pedirme la plantilla.</p>`);
-      partes.push(botones([['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]));
+      if (totalCasos) {
+        partes.push(`<p>El proyecto tiene ${documentos.length} documento${documentos.length === 1 ? '' : 's'} (${totalCasos} de casos de uso o manuales). Puedes adjuntar más o pedirme la plantilla.</p>`);
+        partes.push(botones([['definir-equipo', '👥 Nombres del equipo'], ['generar', '✨ Generar plantilla Scrum', true], ['adjuntar', '📎 Adjuntar más']]));
+      } else {
+        partes.push('<p>Ollama no encontró un caso de uso ni un manual de requisitos. Adjunta un documento con actores, flujos o criterios de aceptación.</p>');
+        partes.push(botones([['adjuntar', '📎 Adjuntar caso de uso', true], ['ejemplo', 'Usar casos de ejemplo']]));
+      }
       return partes.join('');
     }
 
@@ -1122,7 +1155,10 @@
 
       if (nuevos.length) {
         setBusy(true);
-        const burbuja = pensando(`Guardando ${nuevos.length === 1 ? 'el documento' : `${nuevos.length} documentos`}…`);
+        const revisaConOllama = nuevos.some((item) => item.tipo === 'caso_uso' || item.tipo === 'manual');
+        const burbuja = pensando(revisaConOllama
+          ? `Ollama está revisando si ${nuevos.length === 1 ? 'el documento es un caso de uso' : 'los documentos son casos de uso'}…`
+          : `Guardando ${nuevos.length === 1 ? 'el documento' : `${nuevos.length} documentos`}…`);
         try {
           const { guardados, fallidos } = await guardarAdjuntos(nuevos);
           if (BASE && proyecto() === BASE.proyecto) {
@@ -1253,6 +1289,7 @@
       asistente(`
         <p>${intro}</p>
         <p class="muted small">${escapeHtml(plantilla.modelo)} · ${new Date(plantilla.generado_en).toLocaleString('es')} · Basada en: ${escapeHtml((plantilla.documentos_base || []).map((doc) => doc.titulo).join(', '))}</p>
+        ${(plantilla.documentos_descartados || []).length ? `<p class="muted small">Ollama dejó fuera: ${escapeHtml((plantilla.documentos_descartados || []).map((doc) => `${doc.titulo} (${doc.motivo})`).join('; '))}</p>` : ''}
         ${(plantilla.base_conocimiento || []).length ? `<p class="muted small">📚 Base de conocimiento consultada: ${escapeHtml(plantilla.base_conocimiento.join(', '))}</p>` : ''}
 
         <h3>🎯 Visión del producto</h3>

@@ -272,7 +272,7 @@ function expandBoardSprints(tablero) {
 function cleanGoal(...values) {
   for (const value of values) {
     const text = String(value ?? '').trim();
-    if (text && !/^(null|undefined|n\/a|no consta en los manuales)$/i.test(text)) return text;
+    if (text && !/^(null|undefined|n\/a|no consta en los manuales|not stated in the source documents)$/i.test(text)) return text;
   }
   return '';
 }
